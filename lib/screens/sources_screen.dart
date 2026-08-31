@@ -6,6 +6,7 @@ import '../services/stremio/addon_manager.dart';
 import '../services/stremio/addon_client.dart';
 import '../services/test_streams_provider.dart';
 import 'addons_screen.dart';
+import 'player_screen.dart';
 
 class SourcesScreen extends StatefulWidget {
   final MediaItem item;
@@ -47,7 +48,9 @@ class _SourcesScreenState extends State<SourcesScreen> {
     String imdbId = '';
     try {
       imdbId = await tmdb.getExternalId(widget.item.mediaType, widget.item.id);
-      if (mounted) setState(() => _status.add('TMDB: imdb id = ${imdbId.isEmpty ? "not found" : imdbId}'));
+      if (mounted) {
+        setState(() => _status.add('TMDB: imdb id = ${imdbId.isEmpty ? "not found" : imdbId}'));
+      }
     } catch (e) {
       if (mounted) setState(() => _status.add('TMDB external_ids failed: $e'));
     }
@@ -110,11 +113,19 @@ class _SourcesScreenState extends State<SourcesScreen> {
   }
 
   void _onTapResult(StreamResult r) {
+    if (r.playable) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PlayerScreen(result: r, title: widget.item.title),
+        ),
+      );
+      return;
+    }
     final msg = switch (r.kind) {
-      StreamKind.http => 'HTTP stream selected - player arrives in P4.',
-      StreamKind.hls => 'HLS stream selected - player arrives in P4.',
       StreamKind.torrent => 'Torrent sources are not supported in this build.',
       StreamKind.external => 'External links are not supported in this build.',
+      _ => 'Not playable.',
     };
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }

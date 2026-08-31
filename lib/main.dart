@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/setup_screen.dart';
 import 'screens/home_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -55,10 +57,7 @@ class _MyAppState extends State<MyApp> {
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : _apiKey == null
               ? SetupScreen(onKeySaved: _saveKey)
-              : HomeScreen(
-                  apiKey: _apiKey!,
-                  onResetKey: _resetKey,
-                ),
+              : HomeScreen(apiKey: _apiKey!, onResetKey: _resetKey),
     );
   }
 }
