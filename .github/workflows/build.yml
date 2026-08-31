@@ -8,14 +8,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - name: Scaffold Flutter project
-        if: ${{ !hashFiles('pubspec.yaml') }}
-        run: |
-          flutter create --org com.nebula --project-name nebula --platforms android .
-          git config user.name "nebula-ci"
-          git config user.email "ci@nebula.local"
-          git add -A
-          git commit -m "chore: flutter scaffold" || echo "Nothing to commit"
+          flutter-version: '3.24.5'
+      - name: Ensure Android project exists
+        run: flutter create --org com.nebula --project-name nebula --platforms android .
+      - run: flutter clean
       - run: flutter pub get
       - run: flutter build apk --release --split-per-abi
       - uses: actions/upload-artifact@v4
