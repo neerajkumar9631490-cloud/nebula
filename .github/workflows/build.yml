@@ -10,7 +10,10 @@ jobs:
           channel: stable
           flutter-version: '3.24.5'
       - name: Ensure Android project exists
-        run: flutter create --org com.nebula --project-name nebula --platforms android .
+        run: |
+          flutter create --org com.nebula --project-name nebula --platforms android .
+          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application\n        android:usesCleartextTraffic="true"|' android/app/src/main/AndroidManifest.xml
+          cat android/app/src/main/AndroidManifest.xml
       - run: flutter clean
       - run: flutter pub get
       - run: flutter build apk --release --split-per-abi
