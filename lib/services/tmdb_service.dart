@@ -2,43 +2,100 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/media_item.dart';
 
+class TMDBException implements Exception {
+  final String message;
+  TMDBException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class TMDBService {
   final String apiKey;
   TMDBService(this.apiKey);
-  
+
   final String _baseUrl = 'https://api.themoviedb.org/3';
   final String _imgUrl = 'https://image.tmdb.org/t/p/w500';
 
   String getImgUrl(String? path) => path != null ? '$_imgUrl$path' : '';
 
+  Future<Map<String, dynamic>> _getJson(String path, {Map<String, String>? query}) async {
+    final params = <String, String>{
+      'api_key': apiKey,
+      'language': 'en-US',
+      ...?query,
+    };
+
+    final uri = Uri.parse('$_baseUrl$path').replace(queryParameters: params);
+
+    try {
+      final res = await http.get(uri).timeout(const Duration(seconds: 15));
+
+      if (res.statusCode != 200) {
+        String msg = 'TMDB error ${res.statusCode}';
+        try {
+          final body = json.decode(res.body);
+          msg = body['status_message']?.toString() ?? msg;
+        } catch (_) {}
+        throw TMDBException(msg);
+      }
+
+      return json.decode(res.body) as Map<String, dynamic>;
+    } catch (e) {
+      if (e is TMDBException) rethrow;
+      throw TMDBException('Network error: $e');
+    }
+  }
+
   Future<bool> validateKey() async {
     try {
-      final res = await http.get(Uri.parse('$_baseUrl/trending/all/week?api_key=$apiKey'));
-      return res.statusCode == 200;
-    } catch (e) {
+      await _getJson('/configuration');
+      return true;
+    } catch (_) {
       return false;
     }
   }
 
   Future<List<MediaItem>> getTrending() async {
-    final res = await http.get(Uri.parse('$_baseUrl/trending/all/week?api_key=$apiKey'));
-    if (res.statusCode == 200) {
-      final data = json.decode(res.body);
-      return (data['results'] as List).map((e) => MediaItem.fromJson(e)).toList();
-    }
-    return [];
+    final data = await _getJson('/trending/all/week');
+    return _parseResults(data);
+  }
+
+  Future<List<MediaItem>> getPopularMovies() async {
+    final data = await _getJson('/movie/popular', query: {'page': '1'});
+    return _parseResults(data, forcedType: 'movie');
+  }
+
+  Future<List<MediaItem>> getPopularTv() async {
+    final data = await _getJson('/tv/popular', query: {'page': '1'});
+    return _parseResults(data, forcedType: 'tv');
   }
 
   Future<List<MediaItem>> search(String query) async {
-    if (query.isEmpty) return [];
-    final res = await http.get(Uri.parse('$_baseUrl/search/multi?api_key=$apiKey&query=${Uri.encodeComponent(query)}'));
-    if (res.statusCode == 200) {
-      final data = json.decode(res.body);
-      return (data['results'] as List)
-          .where((e) => e['media_type'] != 'person')
-          .map((e) => MediaItem.fromJson(e))
-          .toList();
-    }
-    return [];
+    if (query.trim().isEmpty) return [];
+    final data = await _getJson('/search/multi', query: {
+      'query': query.trim(),
+      'include_adult': 'false',
+      'page': '1',
+    });
+    return _parseResults(data);
+  }
+
+  List<MediaItem> _parseResults(Map<String, dynamic> data, {String? forcedType}) {
+    final raw = data['results'];
+    if (raw is! List) return [];
+
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .where((e) {
+          final type = forcedType ?? e['media_type'];
+          return type == 'movie' || type == 'tv' || e['title'] != null || e['name'] != null;
+        })
+        .map((e) => MediaItem.fromJson({
+              ...e,
+              if (forcedType != null) 'media_type': forcedType,
+            }))
+        .where((item) => item.title.trim().isNotEmpty && item.title != 'Unknown')
+        .toList();
   }
 }
