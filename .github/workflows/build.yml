@@ -9,10 +9,27 @@ jobs:
         with:
           channel: stable
           flutter-version: '3.24.5'
-      - name: Ensure Android project exists
+      - name: Ensure Android project exists and patch SDK version
         run: |
           flutter create --org com.nebula --project-name nebula --platforms android .
+          
+          # Add INTERNET permission and extractNativeLibs
           grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application\n        android:usesCleartextTraffic="true"\n        android:extractNativeLibs="true"|' android/app/src/main/AndroidManifest.xml
+          
+          # Update compileSdkVersion to 36 (required by media_kit)
+          if [ -f android/app/build.gradle ]; then
+            sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 36/' android/app/build.gradle
+          elif [ -f android/app/build.gradle.kts ]; then
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
+          fi
+          
+          # Update Kotlin version if needed
+          if [ -f android/build.gradle ]; then
+            sed -i 's/ext.kotlin_version = .*/ext.kotlin_version = "1.9.0"/' android/build.gradle
+          elif [ -f android/build.gradle.kts ]; then
+            sed -i 's/val kotlinVersion = ".*"/val kotlinVersion = "1.9.0"/' android/build.gradle.kts
+          fi
+          
           cat android/app/src/main/AndroidManifest.xml
       - run: flutter clean
       - run: flutter pub get
