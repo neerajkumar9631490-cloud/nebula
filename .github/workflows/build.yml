@@ -1,0 +1,25 @@
+name: Build APK
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Scaffold Flutter project
+        if: ${{ !hashFiles('pubspec.yaml') }}
+        run: |
+          flutter create --org com.nebula --project-name nebula --platforms android .
+          git config user.name "nebula-ci"
+          git config user.email "ci@nebula.local"
+          git add -A
+          git commit -m "chore: flutter scaffold" || echo "Nothing to commit"
+      - run: flutter pub get
+      - run: flutter build apk --release --split-per-abi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nebula-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 30
