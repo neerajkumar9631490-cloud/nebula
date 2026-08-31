@@ -25,26 +25,28 @@ class TMDBService {
       'language': 'en-US',
       ...?query,
     };
-
     final uri = Uri.parse('$_baseUrl$path').replace(queryParameters: params);
 
-    try {
-      final res = await http.get(uri).timeout(const Duration(seconds: 15));
-
-      if (res.statusCode != 200) {
+    Object? lastError;
+    for (int attempt = 0; attempt < 3; attempt++) {
+      try {
+        final res = await http.get(uri).timeout(const Duration(seconds: 15));
+        if (res.statusCode == 200) {
+          return json.decode(res.body) as Map<String, dynamic>;
+        }
         String msg = 'TMDB error ${res.statusCode}';
         try {
           final body = json.decode(res.body);
           msg = body['status_message']?.toString() ?? msg;
         } catch (_) {}
         throw TMDBException(msg);
+      } catch (e) {
+        if (e is TMDBException) rethrow;
+        lastError = e;
+        await Future.delayed(Duration(milliseconds: 400 * (attempt + 1)));
       }
-
-      return json.decode(res.body) as Map<String, dynamic>;
-    } catch (e) {
-      if (e is TMDBException) rethrow;
-      throw TMDBException('Network error: $e');
     }
+    throw TMDBException('Network error: $lastError');
   }
 
   Future<bool> validateKey() async {
@@ -56,29 +58,28 @@ class TMDBService {
     }
   }
 
-  Future<List<MediaItem>> getTrending() async {
-    final data = await _getJson('/trending/all/week');
-    return _parseResults(data);
-  }
+  Future<List<MediaItem>> getTrending() async =>
+      _parseResults(await _getJson('/trending/all/week'));
 
-  Future<List<MediaItem>> getPopularMovies() async {
-    final data = await _getJson('/movie/popular', query: {'page': '1'});
-    return _parseResults(data, forcedType: 'movie');
-  }
+  Future<List<MediaItem>> getPopularMovies() async =>
+      _parseResults(await _getJson('/movie/popular', query: {'page': '1'}), forcedType: 'movie');
 
-  Future<List<MediaItem>> getPopularTv() async {
-    final data = await _getJson('/tv/popular', query: {'page': '1'});
-    return _parseResults(data, forcedType: 'tv');
-  }
+  Future<List<MediaItem>> getPopularTv() async =>
+      _parseResults(await _getJson('/tv/popular', query: {'page': '1'}), forcedType: 'tv');
 
   Future<List<MediaItem>> search(String query) async {
     if (query.trim().isEmpty) return [];
-    final data = await _getJson('/search/multi', query: {
+    return _parseResults(await _getJson('/search/multi', query: {
       'query': query.trim(),
       'include_adult': 'false',
       'page': '1',
-    });
-    return _parseResults(data);
+    }));
+  }
+
+  Future<String> getExternalId(String mediaType, int id) async {
+    final path = mediaType == 'tv' ? '/tv/$id/external_ids' : '/movie/$id/external_ids';
+    final data = await _getJson(path);
+    return data['imdb_id']?.toString() ?? '';
   }
 
   List<MediaItem> _parseResults(Map<String, dynamic> data, {String? forcedType}) {

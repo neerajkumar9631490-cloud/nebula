@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
+import 'sources_screen.dart';
 
 class DetailScreen extends StatelessWidget {
   final MediaItem item;
@@ -13,7 +14,7 @@ class DetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final service = TMDBService(apiKey);
     return Scaffold(
-      appBar: AppBar(title: Text(item.title)),
+      appBar: AppBar(title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -30,7 +31,8 @@ class DetailScreen extends StatelessWidget {
             const SizedBox(height: 20),
             Text(item.title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text('${item.releaseYear} • ${item.mediaType.toUpperCase()}', style: const TextStyle(color: Colors.grey)),
+            Text('${item.releaseYear} • ${item.mediaType.toUpperCase()}',
+                style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 16),
             const Text('Overview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
@@ -38,17 +40,18 @@ class DetailScreen extends StatelessWidget {
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
+              child: FilledButton.icon(
                 icon: const Icon(Icons.play_arrow),
-                label: const Text('Play (Dummy)'),
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Source aggregation will be added in Phase 3!')),
-                  );
-                },
+                label: const Text('Find Sources'),
+                style: FilledButton.styleFrom(padding: const EdgeInsets.all(16)),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SourcesScreen(item: item, apiKey: apiKey),
+                  ),
+                ),
               ),
-            )
+            ),
           ],
         ),
       ),
