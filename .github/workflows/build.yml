@@ -8,40 +8,13 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.24.5'
-      - name: Ensure Android project exists and patch Gradle
+          flutter-version: '3.47.2'
+      - name: Ensure Android project exists
         run: |
           flutter create --org com.nebula --project-name nebula --platforms android .
-          
-          # Add INTERNET permission and extractNativeLibs
           grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application\n        android:usesCleartextTraffic="true"\n        android:extractNativeLibs="true"|' android/app/src/main/AndroidManifest.xml
-          
-          # Update app-level compileSdk
-          if [ -f android/app/build.gradle ]; then
-            sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 36/' android/app/build.gradle
-          elif [ -f android/app/build.gradle.kts ]; then
-            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
-          fi
-          
-          # Patch root build.gradle to define flutter extension and force compileSdk for all plugins
-          cat >> android/build.gradle << 'GRADLE'
-
-// Patch for media_kit and transitive dependencies
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                if (project.android.compileSdkVersion == null || 
-                    project.android.compileSdkVersion.toString().contains("null")) {
-                    project.android.compileSdkVersion 36
-                }
-            }
-        }
-    }
-}
-GRADLE
-          
-          cat android/app/src/main/AndroidManifest.xml
+          if [ -f android/app/build.gradle ]; then sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 36/' android/app/build.gradle; fi
+          if [ -f android/app/build.gradle.kts ]; then sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts; fi
       - run: flutter clean
       - run: flutter pub get
       - run: flutter build apk --release --split-per-abi
