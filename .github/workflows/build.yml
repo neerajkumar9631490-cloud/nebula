@@ -9,12 +9,38 @@ jobs:
         with:
           channel: stable
           flutter-version: '3.47.2'
-      - name: Ensure Android project exists
+      - name: Ensure Android project and patch Kotlin DSL correctly
         run: |
           flutter create --org com.nebula --project-name nebula --platforms android .
-          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application\n        android:usesCleartextTraffic="true"\n        android:extractNativeLibs="true"|' android/app/src/main/AndroidManifest.xml
-          if [ -f android/app/build.gradle ]; then sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 36/' android/app/build.gradle; fi
-          if [ -f android/app/build.gradle.kts ]; then sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts; fi
+          
+          # 1. INTERNET permission in manifest only (NO extractNativeLibs — AGP 8 forbids it)
+          if ! grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml; then
+            sed -i 's|<manifest|<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET"/>|' android/app/src/main/AndroidManifest.xml
+            sed -i '/^<manifest xmlns:android/d' android/app/src/main/AndroidManifest.xml
+            # Re-add the original manifest root with INTERNET before it
+            awk 'BEGIN{print "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">"}
+                 /^<manifest/{next}
+                 {print}
+                 END{}' android/app/src/main/AndroidManifest.xml > /tmp/m.xml
+            mv /tmp/m.xml android/app/src/main/AndroidManifest.xml
+            # Prepend INTERNET permission
+            awk '
+              /^<manifest/{print; print "    <uses-permission android:name=\"android.permission.INTERNET\"/>"; next}
+              {print}
+            ' android/app/src/main/AndroidManifest.xml > /tmp/m.xml
+            mv /tmp/m.xml android/app/src/main/AndroidManifest.xml
+          fi
+          
+          # 2. Patch Kotlin DSL: set compileSdk = 36
+          sed -i 's|compileSdk = flutter\.compileSdkVersion|compileSdk = 36|' android/app/build.gradle.kts
+          
+          # 3. Insert packagingOptions.jniLibs.useLegacyPackaging = true inside android {} block
+          sed -i '/^android {/a\    packagingOptions { jniLibs.useLegacyPackaging = true }' android/app/build.gradle.kts
+          
+          echo "=== build.gradle.kts head ==="
+          head -40 android/app/build.gradle.kts
+          echo "=== AndroidManifest head ==="
+          head -10 android/app/src/main/AndroidManifest.xml
       - run: flutter clean
       - run: flutter pub get
       - run: flutter build apk --release --split-per-abi
