@@ -125,7 +125,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                 color: AppTheme.card,
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(color: AppTheme.stroke),
-                                boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 18, offsetY: 8)],
+                                boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 18, offset: Offset(0, 8))],
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(14),
