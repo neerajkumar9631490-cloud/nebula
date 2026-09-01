@@ -99,10 +99,22 @@ class AddonClient {
           kind: kind,
         ));
       } else if (infoHash != null || (url != null && url.startsWith('magnet:'))) {
+        final magnet = url?.startsWith('magnet:') == true
+            ? url
+            : 'magnet:?xt=urn:btih:$infoHash';
+
+        // Try to extract file index if available
+        int? fileIdx;
+        if (s['fileIdx'] != null) {
+          fileIdx = s['fileIdx'] is int ? s['fileIdx'] : int.tryParse(s['fileIdx'].toString());
+        }
+
         results.add(StreamResult(
           sourceName: addonName,
-          label: '${label.isEmpty ? 'Torrent source' : label} [torrent - unsupported in this build]',
+          label: label.isEmpty ? 'Torrent source' : label,
           kind: StreamKind.torrent,
+          magnet: magnet,
+          fileIndex: fileIdx ?? 0,
         ));
       } else if (externalUrl != null) {
         results.add(StreamResult(

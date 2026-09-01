@@ -4,7 +4,6 @@ import '../models/stream_result.dart';
 import '../services/tmdb_service.dart';
 import '../services/stremio/addon_manager.dart';
 import '../services/stremio/addon_client.dart';
-import '../services/test_streams_provider.dart';
 import 'addons_screen.dart';
 import 'player_screen.dart';
 
@@ -62,16 +61,6 @@ class _SourcesScreenState extends State<SourcesScreen> {
 
     final futures = <Future<void>>[];
 
-    futures.add(Future(() async {
-      final items = TestStreamsProvider.streamsFor(widget.item.title);
-      if (mounted) {
-        setState(() {
-          _results.addAll(items);
-          _status.add('${TestStreamsProvider.name}: ${items.length} test streams');
-        });
-      }
-    }));
-
     for (final url in urls) {
       futures.add(Future(() async {
         final base = AddonManager.baseUrlFromManifestUrl(url);
@@ -122,8 +111,15 @@ class _SourcesScreenState extends State<SourcesScreen> {
       );
       return;
     }
+
+    if (r.isTorrent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Torrent streaming coming soon!')),
+      );
+      return;
+    }
+
     final msg = switch (r.kind) {
-      StreamKind.torrent => 'Torrent sources are not supported in this build.',
       StreamKind.external => 'External links are not supported in this build.',
       _ => 'Not playable.',
     };
@@ -133,7 +129,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
   Color _kindColor(StreamKind k) => switch (k) {
         StreamKind.http => Colors.green,
         StreamKind.hls => Colors.teal,
-        StreamKind.torrent => Colors.grey,
+        StreamKind.torrent => Colors.orange,
         StreamKind.external => Colors.blue,
       };
 
@@ -222,7 +218,9 @@ class _SourcesScreenState extends State<SourcesScreen> {
                 ..._results.map((r) => Card(
                       child: ListTile(
                         leading: Icon(
-                          r.kind == StreamKind.hls ? Icons.live_tv : Icons.play_circle_outline,
+                          r.kind == StreamKind.hls ? Icons.live_tv :
+                          r.kind == StreamKind.torrent ? Icons.cloud_download :
+                          Icons.play_circle_outline,
                           color: _kindColor(r.kind),
                         ),
                         title: Text(r.sourceName, style: const TextStyle(fontWeight: FontWeight.bold)),

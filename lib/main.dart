@@ -3,10 +3,13 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/setup_screen.dart';
 import 'screens/home_screen.dart';
+import 'services/torrent/torrent_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  // Initialize torrent service
+  TorrentService().initialize();
   runApp(const MyApp());
 }
 
