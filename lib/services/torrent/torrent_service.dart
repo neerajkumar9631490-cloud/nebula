@@ -1,56 +1,69 @@
 import 'dart:async';
-import 'dart:io';
-import 'package:flutter_torrent_streamer/flutter_torrent_streamer.dart';
+import 'package:libtorrent_flutter/libtorrent_flutter.dart';
 
 class TorrentService {
   static final TorrentService _instance = TorrentService._internal();
   factory TorrentService() => _instance;
   TorrentService._internal();
 
-  FlutterTorrentStreamer? _streamer;
-  String? _currentMagnet;
-  StreamController<String>? _progressController;
+  LibtorrentFlutter? _session;
+  String? _currentInfoHash;
+  final StreamController<double> _progressController = StreamController<double>.broadcast();
   bool _isStreaming = false;
 
   Future<void> initialize() async {
-    if (_streamer == null) {
-      _streamer = FlutterTorrentStreamer();
-      await _streamer!.init();
+    if (_session == null) {
+      _session = LibtorrentFlutter();
+      await _session!.init(
+        savePath: '/sdcard/Android/data/com.nebula.nebula/cache/torrents',
+        enableHttpServer: true, // Built-in HTTP server for streaming
+        httpPort: 0, // Auto-assign port
+      );
     }
   }
 
   Future<String?> startStream({
     required String magnet,
-    required int fileIndex,
+    int fileIndex = 0,
     Function(double)? onProgress,
   }) async {
     try {
       await initialize();
-
-      _currentMagnet = magnet;
-      _progressController = StreamController<String>.broadcast();
-
-      // Listen to progress
-      _streamer!.onTorrentStatus.listen((status) {
-        if (onProgress != null) {
-          onProgress(status.progress);
-        }
-        _progressController?.add('${status.downloaded}/${status.total}');
-      });
-
-      // Start streaming
-      final result = await _streamer!.startTorrent(
-        magnetLink: magnet,
-        savePath: '/sdcard/Android/data/com.nebula.nebula/cache/torrents',
+      
+      // Extract info hash from magnet
+      final infoHashMatch = RegExp(r'xt=urn:btih:([a-fA-F0-9]{40})').firstMatch(magnet);
+      if (infoHashMatch == null) return null;
+      final infoHash = infoHashMatch.group(1)!;
+      
+      _currentInfoHash = infoHash;
+      
+      // Add torrent to session
+      final result = await _session!.addTorrent(
+        magnetUri: magnet,
         sequentialDownload: true,
-        selectedFiles: [fileIndex],
+        prioritizeFirstLastPiece: true,
       );
-
-      if (result.isSuccess && result.localUrl != null) {
-        _isStreaming = true;
-        return result.localUrl; // Returns local HTTP URL like http://127.0.0.1:PORT/file.mp4
+      
+      if (!result) return null;
+      
+      // Listen for progress
+      _session!.onTorrentProgress.listen((progress) {
+        if (progress.infoHash == infoHash) {
+          _progressController.add(progress.progress);
+          onProgress?.call(progress.progress);
+        }
+      });
+      
+      // Wait for HTTP URL to be ready (streaming server)
+      for (int i = 0; i < 60; i++) {
+        await Future.delayed(const Duration(seconds: 1));
+        final url = await _session!.getHttpUrl(infoHash, fileIndex);
+        if (url != null && url.isNotEmpty) {
+          _isStreaming = true;
+          return url; // Returns http://127.0.0.1:PORT/path/to/file
+        }
       }
-
+      
       return null;
     } catch (e) {
       print('Torrent error: $e');
@@ -59,19 +72,18 @@ class TorrentService {
   }
 
   Future<void> stopStream() async {
-    if (_streamer != null && _isStreaming) {
-      await _streamer!.stopTorrent(_currentMagnet ?? '');
+    if (_session != null && _isStreaming && _currentInfoHash != null) {
+      await _session!.removeTorrent(_currentInfoHash!);
       _isStreaming = false;
-      _currentMagnet = null;
-      _progressController?.close();
+      _currentInfoHash = null;
     }
   }
 
-  Stream<String> get progressStream => _progressController?.stream ?? Stream.empty();
+  Stream<double> get progressStream => _progressController.stream;
 
   void dispose() {
     stopStream();
-    _streamer?.dispose();
-    _progressController?.close();
+    _progressController.close();
+    _session?.dispose();
   }
 }

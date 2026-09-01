@@ -102,7 +102,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
   }
 
   void _onTapResult(StreamResult r) {
-    if (r.playable) {
+    if (r.playable || r.isTorrent) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -111,14 +111,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
       );
       return;
     }
-
-    if (r.isTorrent) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Torrent streaming coming soon!')),
-      );
-      return;
-    }
-
+    
     final msg = switch (r.kind) {
       StreamKind.external => 'External links are not supported in this build.',
       _ => 'Not playable.',
@@ -218,7 +211,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                 ..._results.map((r) => Card(
                       child: ListTile(
                         leading: Icon(
-                          r.kind == StreamKind.hls ? Icons.live_tv :
+                          r.kind == StreamKind.hls ? Icons.live_tv : 
                           r.kind == StreamKind.torrent ? Icons.cloud_download :
                           Icons.play_circle_outline,
                           color: _kindColor(r.kind),

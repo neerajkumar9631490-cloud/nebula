@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../models/stream_result.dart';
+import '../services/torrent/torrent_service.dart';
 
 class PlayerScreen extends StatefulWidget {
   final StreamResult result;
@@ -18,12 +19,15 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   late final Player _player;
   late final VideoController _videoController;
+  final TorrentService _torrentService = TorrentService();
 
   bool _playing = false;
   bool _buffering = true;
   bool _controlsVisible = true;
   bool _orientationLocked = false;
   bool _failed = false;
+  bool _isTorrent = false;
+  double _torrentProgress = 0;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   double _rate = 1.0;
@@ -60,10 +64,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (mounted) setState(() => _rate = v);
     }));
 
+    _isTorrent = widget.result.isTorrent;
     _open();
 
-    _failTimer = Timer(const Duration(seconds: 20), () {
-      if (mounted && _duration == Duration.zero && !_playing) {
+    _failTimer = Timer(const Duration(seconds: 30), () {
+      if (mounted && _duration == Duration.zero && !_playing && !_isTorrent) {
         setState(() => _failed = true);
       }
     });
@@ -75,8 +80,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _failed = false;
       _buffering = true;
     });
+    
     try {
-      await _player.open(Media(widget.result.url!));
+      String? url = widget.result.url;
+      
+      if (_isTorrent && widget.result.magnet != null) {
+        // Start torrent streaming
+        url = await _torrentService.startStream(
+          magnet: widget.result.magnet!,
+          fileIndex: widget.result.fileIndex ?? 0,
+          onProgress: (p) => setState(() => _torrentProgress = p),
+        );
+        
+        if (url == null) {
+          setState(() {
+            _failed = true;
+            _buffering = false;
+          });
+          return;
+        }
+      }
+      
+      if (url != null) {
+        await _player.open(Media(url));
+      }
     } catch (e) {
       if (mounted) setState(() => _failed = true);
     }
@@ -129,6 +156,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     for (final s in _subs) {
       s.cancel();
     }
+    _torrentService.stopStream();
     _player.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
@@ -151,7 +179,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
           ),
           if (_buffering && !_failed)
-            const Center(child: CircularProgressIndicator()),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  if (_isTorrent) ...[
+                    const SizedBox(height: 16),
+                    Text('Downloading: ${(_torrentProgress * 100).toStringAsFixed(1)}%'),
+                  ],
+                ],
+              ),
+            ),
           if (_failed)
             Center(
               child: Column(
@@ -159,7 +198,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 children: [
                   const Icon(Icons.error_outline, size: 48, color: Colors.orangeAccent),
                   const SizedBox(height: 8),
-                  const Text('Stream failed to load'),
+                  Text(_isTorrent ? 'Failed to start torrent stream' : 'Stream failed to load'),
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: _open,
