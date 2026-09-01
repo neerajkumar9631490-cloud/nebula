@@ -27,7 +27,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _orientationLocked = false;
   bool _failed = false;
   bool _isTorrent = false;
-  double _torrentProgress = 0;
+  TorrentStats? _torrentStats;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   double _rate = 1.0;
@@ -66,12 +66,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     _isTorrent = widget.result.isTorrent;
     _open();
-
-    _failTimer = Timer(const Duration(seconds: 30), () {
-      if (mounted && _duration == Duration.zero && !_playing && !_isTorrent) {
-        setState(() => _failed = true);
-      }
-    });
     _scheduleHide();
   }
 
@@ -80,18 +74,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _failed = false;
       _buffering = true;
     });
-    
+
     try {
       String? url = widget.result.url;
-      
+
       if (_isTorrent && widget.result.magnet != null) {
         // Start torrent streaming
         url = await _torrentService.startStream(
           magnet: widget.result.magnet!,
-          fileIndex: widget.result.fileIndex ?? 0,
-          onProgress: (p) => setState(() => _torrentProgress = p),
+          fileIndex: widget.result.fileIndex,
+          onStats: (stats) {
+            if (mounted) {
+              setState(() => _torrentStats = stats);
+              // Stop buffering once we have peers
+              if (stats.isReady && _buffering) {
+                setState(() => _buffering = false);
+              }
+            }
+          },
         );
-        
+
         if (url == null) {
           setState(() {
             _failed = true;
@@ -100,11 +102,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           return;
         }
       }
-      
+
       if (url != null) {
         await _player.open(Media(url));
       }
     } catch (e) {
+      debugPrint('Player error: $e');
       if (mounted) setState(() => _failed = true);
     }
   }
@@ -156,7 +159,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     for (final s in _subs) {
       s.cancel();
     }
-    _torrentService.stopStream();
+    if (_isTorrent) {
+      _torrentService.cleanup();
+    }
     _player.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
@@ -184,9 +189,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const CircularProgressIndicator(),
-                  if (_isTorrent) ...[
+                  if (_isTorrent && _torrentStats != null) ...[
                     const SizedBox(height: 16),
-                    Text('Downloading: ${(_torrentProgress * 100).toStringAsFixed(1)}%'),
+                    Text(
+                      'Downloading: ${(_torrentStats!.progress * 100).toStringAsFixed(1)}%',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    Text(
+                      'Speed: ${_torrentStats!.speedLabel}',
+                      style: const TextStyle(color: Colors.white60, fontSize: 12),
+                    ),
+                    Text(
+                      'Peers: ${_torrentStats!.activePeers}',
+                      style: const TextStyle(color: Colors.white60, fontSize: 12),
+                    ),
                   ],
                 ],
               ),
