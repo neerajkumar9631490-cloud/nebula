@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/tmdb_service.dart';
+import '../theme/app_theme.dart';
 
 class SetupScreen extends StatefulWidget {
   final Function(String) onKeySaved;
@@ -18,7 +19,7 @@ class _SetupScreenState extends State<SetupScreen> {
     setState(() { _loading = true; _error = null; });
     final service = TMDBService(_controller.text.trim());
     final isValid = await service.validateKey();
-    
+
     if (isValid) {
       widget.onKeySaved(_controller.text.trim());
     } else {
@@ -29,28 +30,53 @@ class _SetupScreenState extends State<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Nebula Setup')),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('Enter your TMDB API Key to continue:', style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _controller,
-              decoration: InputDecoration(
-                border: const OutlineInputBorder(),
-                labelText: 'API Key',
-                errorText: _error,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: AppTheme.card,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.stroke),
+                ),
+                child: const Icon(Icons.play_arrow_rounded, size: 52, color: AppTheme.accent),
               ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _loading ? null : _validateAndSave,
-              child: _loading ? const CircularProgressIndicator() : const Text('Save & Start'),
-            )
-          ],
+              const SizedBox(height: 24),
+              const Text(
+                'NEBULA',
+                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: 6, color: AppTheme.text),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Every stream. One app.',
+                style: TextStyle(color: AppTheme.textDim),
+              ),
+              const SizedBox(height: 40),
+              TextField(
+                controller: _controller,
+                style: const TextStyle(color: AppTheme.text),
+                decoration: InputDecoration(
+                  labelText: 'TMDB API Key',
+                  errorText: _error,
+                  prefixIcon: const Icon(Icons.key_rounded),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _loading ? null : _validateAndSave,
+                  child: _loading
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save & Start'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

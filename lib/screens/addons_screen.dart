@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/stremio/addon_manager.dart';
 import '../services/stremio/addon_client.dart';
+import '../theme/app_theme.dart';
 
 class AddonsScreen extends StatefulWidget {
   const AddonsScreen({super.key});
@@ -39,9 +40,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
       _controller.clear();
       await _load();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added: ${m.name}')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added: ${m.name}')));
       }
     } catch (e) {
       setState(() => _error = 'Could not load manifest: $e');
@@ -56,46 +55,86 @@ class _AddonsScreenState extends State<AddonsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Stremio Add-ons')),
+      appBar: AppBar(title: const Text('Add-ons')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         children: [
           TextField(
             controller: _controller,
             keyboardType: TextInputType.url,
+            style: const TextStyle(color: AppTheme.text),
             decoration: InputDecoration(
               labelText: 'Add-on manifest URL',
-              hintText: 'https://v3-cinemeta.strem.io/manifest.json',
+              hintText: 'https://.../manifest.json',
               errorText: _error,
-              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.link_rounded),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           FilledButton.icon(
             onPressed: _add,
-            icon: const Icon(Icons.add_link),
+            icon: const Icon(Icons.add_link_rounded),
             label: const Text('Validate & Add'),
           ),
-          const SizedBox(height: 24),
-          const Text('Installed add-ons',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 28),
+          const Text('Installed', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppTheme.text)),
+          const SizedBox(height: 12),
           if (_urls.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(8),
-              child: Text('No add-ons yet. Paste any Stremio-compatible manifest URL above.'),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.stroke),
+              ),
+              child: const Column(
+                children: [
+                  Icon(Icons.extension_off_rounded, size: 40, color: AppTheme.textDim),
+                  SizedBox(height: 10),
+                  Text('No add-ons yet', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.w600)),
+                  SizedBox(height: 4),
+                  Text('Paste any Stremio-compatible manifest URL above.',
+                      textAlign: TextAlign.center, style: TextStyle(color: AppTheme.textDim, fontSize: 12)),
+                ],
+              ),
             ),
           ..._urls.map((url) => FutureBuilder<AddonManifest>(
                 future: _client.fetchManifest(url),
                 builder: (context, snap) {
-                  final name = snap.data?.name ?? url;
-                  return ListTile(
-                    leading: const Icon(Icons.extension),
-                    title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text(url, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete),
-                      onPressed: () => _remove(url),
+                  final name = snap.data?.name ?? (snap.hasError ? 'Unavailable' : 'Loading...');
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.card,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.stroke),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(color: AppTheme.cardHi, shape: BoxShape.circle),
+                          child: const Icon(Icons.extension_rounded, color: AppTheme.textDim),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.text)),
+                              const SizedBox(height: 2),
+                              Text(url, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 11, color: AppTheme.textDim)),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.textDim),
+                          onPressed: () => _remove(url),
+                        ),
+                      ],
                     ),
                   );
                 },
