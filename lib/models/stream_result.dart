@@ -5,7 +5,8 @@ class StreamResult {
   final String label;
   final String? url;
   final StreamKind kind;
-  final String? magnet; // For torrent sources
+  final String? magnet;
+  final int? fileIndex;
 
   const StreamResult({
     required this.sourceName,
@@ -13,6 +14,7 @@ class StreamResult {
     this.url,
     required this.kind,
     this.magnet,
+    this.fileIndex,
   });
 
   bool get playable =>
