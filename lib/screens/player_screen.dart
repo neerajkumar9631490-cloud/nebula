@@ -4,13 +4,25 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../models/stream_result.dart';
+import '../models/media_item.dart';
 import '../services/torrent/torrent_service.dart';
+import '../services/watch_progress_service.dart';
 
 class PlayerScreen extends StatefulWidget {
   final StreamResult result;
   final String title;
+  final MediaItem item;
+  final int? season;
+  final int? episode;
 
-  const PlayerScreen({super.key, required this.result, required this.title});
+  const PlayerScreen({
+    super.key,
+    required this.result,
+    required this.title,
+    required this.item,
+    this.season,
+    this.episode,
+  });
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -20,6 +32,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late final Player _player;
   late final VideoController _videoController;
   final TorrentService _torrentService = TorrentService();
+  final WatchProgressService _wp = WatchProgressService();
 
   bool _playing = false;
   bool _buffering = true;
@@ -33,8 +46,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   double _rate = 1.0;
   double _volume = 100;
 
-  Timer? _failTimer;
   Timer? _hideTimer;
+  Timer? _saveTimer;
+  Timer? _failTimer;
   final List<StreamSubscription> _subs = [];
 
   @override
@@ -67,6 +81,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _isTorrent = widget.result.isTorrent;
     _open();
     _scheduleHide();
+
+    // Auto-save progress every 5 seconds
+    _saveTimer = Timer.periodic(const Duration(seconds: 5), (_) => _saveProgress());
   }
 
   Future<void> _open() async {
@@ -79,14 +96,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       String? url = widget.result.url;
 
       if (_isTorrent && widget.result.magnet != null) {
-        // Start torrent streaming
         url = await _torrentService.startStream(
           magnet: widget.result.magnet!,
           fileIndex: widget.result.fileIndex,
           onStats: (stats) {
             if (mounted) {
               setState(() => _torrentStats = stats);
-              // Stop buffering once we have peers
               if (stats.isReady && _buffering) {
                 setState(() => _buffering = false);
               }
@@ -95,20 +110,64 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
 
         if (url == null) {
-          setState(() {
-            _failed = true;
-            _buffering = false;
-          });
+          if (mounted) setState(() { _failed = true; _buffering = false; });
           return;
         }
       }
 
       if (url != null) {
         await _player.open(Media(url));
+
+        // Resume from saved position if available
+        await _tryResume();
       }
     } catch (e) {
       debugPrint('Player error: $e');
       if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  Future<void> _tryResume() async {
+    final progress = widget.item.mediaType == 'tv'
+        ? await _wp.loadEpisode(
+            widget.item.id,
+            widget.season ?? 1,
+            widget.episode ?? 1,
+          )
+        : await _wp.loadMovie(widget.item.id);
+
+    if (progress != null && progress.isResumable && mounted) {
+      final resumePos = Duration(milliseconds: progress.positionMs);
+      if (_duration.inMilliseconds > 0) {
+        _player.seek(resumePos);
+      } else {
+        // Wait for duration, then seek
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted && _duration.inMilliseconds > 0) {
+          _player.seek(resumePos);
+        }
+      }
+    }
+  }
+
+  Future<void> _saveProgress() async {
+    if (_duration.inMilliseconds <= 0 || _position.inMilliseconds < 0) return;
+    if (widget.item.mediaType == 'tv') {
+      await _wp.saveEpisode(
+        id: widget.item.id,
+        season: widget.season ?? 1,
+        episode: widget.episode ?? 1,
+        positionMs: _position.inMilliseconds,
+        durationMs: _duration.inMilliseconds,
+        title: widget.title,
+      );
+    } else {
+      await _wp.saveMovie(
+        id: widget.item.id,
+        positionMs: _position.inMilliseconds,
+        durationMs: _duration.inMilliseconds,
+        title: widget.title,
+      );
     }
   }
 
@@ -154,8 +213,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    _failTimer?.cancel();
+    _saveProgress(); // Save on exit
+    _saveTimer?.cancel();
     _hideTimer?.cancel();
+    _failTimer?.cancel();
     for (final s in _subs) {
       s.cancel();
     }
@@ -196,11 +257,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       style: const TextStyle(color: Colors.white70),
                     ),
                     Text(
-                      'Speed: ${_torrentStats!.speedLabel}',
-                      style: const TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                    Text(
-                      'Peers: ${_torrentStats!.activePeers}',
+                      'Speed: ${_torrentStats!.speedLabel} • Peers: ${_torrentStats!.activePeers}',
                       style: const TextStyle(color: Colors.white60, fontSize: 12),
                     ),
                   ],

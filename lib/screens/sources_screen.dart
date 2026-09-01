@@ -10,8 +10,16 @@ import 'player_screen.dart';
 class SourcesScreen extends StatefulWidget {
   final MediaItem item;
   final String apiKey;
+  final int season;
+  final int episode;
 
-  const SourcesScreen({super.key, required this.item, required this.apiKey});
+  const SourcesScreen({
+    super.key,
+    required this.item,
+    required this.apiKey,
+    this.season = 1,
+    this.episode = 1,
+  });
 
   @override
   State<SourcesScreen> createState() => _SourcesScreenState();
@@ -22,8 +30,8 @@ class _SourcesScreenState extends State<SourcesScreen> {
   final List<StreamResult> _results = [];
   final List<String> _status = [];
   bool _loading = true;
-  final TextEditingController _seasonCtrl = TextEditingController(text: '1');
-  final TextEditingController _episodeCtrl = TextEditingController(text: '1');
+  late TextEditingController _seasonCtrl;
+  late TextEditingController _episodeCtrl;
 
   bool get _isTv => widget.item.mediaType == 'tv';
   int get _season => int.tryParse(_seasonCtrl.text) ?? 1;
@@ -32,6 +40,8 @@ class _SourcesScreenState extends State<SourcesScreen> {
   @override
   void initState() {
     super.initState();
+    _seasonCtrl = TextEditingController(text: widget.season.toString());
+    _episodeCtrl = TextEditingController(text: widget.episode.toString());
     _run();
   }
 
@@ -43,7 +53,6 @@ class _SourcesScreenState extends State<SourcesScreen> {
     });
 
     final tmdb = TMDBService(widget.apiKey);
-
     String imdbId = '';
     try {
       imdbId = await tmdb.getExternalId(widget.item.mediaType, widget.item.id);
@@ -60,7 +69,6 @@ class _SourcesScreenState extends State<SourcesScreen> {
     }
 
     final futures = <Future<void>>[];
-
     for (final url in urls) {
       futures.add(Future(() async {
         final base = AddonManager.baseUrlFromManifestUrl(url);
@@ -102,18 +110,23 @@ class _SourcesScreenState extends State<SourcesScreen> {
   }
 
   void _onTapResult(StreamResult r) {
-    // Navigate to player for ALL playable sources (HTTP, HLS, and Torrent)
     if (r.playable || r.isTorrent) {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => PlayerScreen(result: r, title: widget.item.title),
+          builder: (_) => PlayerScreen(
+            result: r,
+            title: _isTv
+                ? '${widget.item.title} - S${_season}E${_episode}'
+                : widget.item.title,
+            item: widget.item,
+            season: _isTv ? _season : null,
+            episode: _isTv ? _episode : null,
+          ),
         ),
       );
       return;
     }
-    
-    // External links not supported
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('This source type is not supported.')),
     );
@@ -211,7 +224,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                 ..._results.map((r) => Card(
                       child: ListTile(
                         leading: Icon(
-                          r.kind == StreamKind.hls ? Icons.live_tv : 
+                          r.kind == StreamKind.hls ? Icons.live_tv :
                           r.kind == StreamKind.torrent ? Icons.cloud_download :
                           Icons.play_circle_outline,
                           color: _kindColor(r.kind),
