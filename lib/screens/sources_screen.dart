@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/media_item.dart';
 import '../models/stream_result.dart';
 import '../services/tmdb_service.dart';
@@ -102,8 +101,9 @@ class _SourcesScreenState extends State<SourcesScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
-  Future<void> _onTapResult(StreamResult r) async {
-    if (r.playable) {
+  void _onTapResult(StreamResult r) {
+    // Navigate to player for ALL playable sources (HTTP, HLS, and Torrent)
+    if (r.playable || r.isTorrent) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -113,27 +113,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
       return;
     }
     
-    if (r.isTorrent && r.magnet != null) {
-      // Open magnet in external torrent app
-      final uri = Uri.parse(r.magnet!);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No torrent app installed. Install LibreTorrent or Flud.')),
-        );
-      }
-      return;
-    }
-    
-    if (r.kind == StreamKind.external && r.url != null) {
-      final uri = Uri.parse(r.url!);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-      return;
-    }
-    
+    // External links not supported
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('This source type is not supported.')),
     );
