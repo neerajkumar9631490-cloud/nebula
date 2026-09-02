@@ -31,24 +31,30 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   late final Player _player;
   late final VideoController _videoController;
-  final TorrentService _torrentService = TorrentService();
+  final TorrentService _torrent = TorrentService();
   final WatchProgressService _wp = WatchProgressService();
+
+  final ValueNotifier<TorrentStats?> _stats = ValueNotifier(null);
+  StreamSubscription<TorrentStats>? _statsSub;
 
   bool _playing = false;
   bool _buffering = true;
+  bool _opened = false;
+  bool _failed = false;
   bool _controlsVisible = true;
   bool _orientationLocked = false;
-  bool _failed = false;
   bool _isTorrent = false;
-  TorrentStats? _torrentStats;
+  TorrentPhase _phase = TorrentPhase.metadata;
+
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   double _rate = 1.0;
   double _volume = 100;
+  int _openedAt = 0;
 
   Timer? _hideTimer;
   Timer? _saveTimer;
-  Timer? _failTimer;
+  Timer? _watchdog;
   final List<StreamSubscription> _subs = [];
 
   @override
@@ -56,7 +62,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-    _player = Player();
+    _player = Player(
+      configuration: PlayerConfiguration(bufferSize: 32 * 1024 * 1024),
+    );
     _videoController = VideoController(_player);
 
     _subs.add(_player.streams.playing.listen((v) {
@@ -81,74 +89,62 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _isTorrent = widget.result.isTorrent;
     _open();
     _scheduleHide();
-
-    // Auto-save progress every 5 seconds
     _saveTimer = Timer.periodic(const Duration(seconds: 5), (_) => _saveProgress());
+
+    _watchdog = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (!_opened && now - _openedAt > 60000) {
+        setState(() => _failed = true);
+      } else if (_opened && !_playing && _duration == Duration.zero && now - _openedAt > 25000) {
+        setState(() => _failed = true);
+      }
+    });
   }
 
   Future<void> _open() async {
     setState(() {
       _failed = false;
       _buffering = true;
+      _openedAt = DateTime.now().millisecondsSinceEpoch;
     });
 
     try {
       String? url = widget.result.url;
 
       if (_isTorrent && widget.result.magnet != null) {
-        url = await _torrentService.startStream(
+        url = await _torrent.startStream(
           magnet: widget.result.magnet!,
           fileIndex: widget.result.fileIndex,
-          onStats: (stats) {
-            if (mounted) {
-              setState(() => _torrentStats = stats);
-              if (stats.isReady && _buffering) {
-                setState(() => _buffering = false);
-              }
-            }
+          onPhase: (p, s) {
+            if (s != null) _stats.value = s;
+            if (mounted && !_opened) setState(() => _phase = p);
           },
         );
-
         if (url == null) {
-          if (mounted) setState(() { _failed = true; _buffering = false; });
+          if (mounted) setState(() { _failed = true; });
           return;
         }
+        _statsSub = _torrent.statsStream(widget.result.magnet!).listen((s) {
+          _stats.value = s;
+        });
       }
 
-      if (url != null) {
-        await _player.open(Media(url));
-
-        // Resume from saved position if available
-        await _tryResume();
-      }
+      await _player.open(Media(url!));
+      if (mounted) setState(() => _opened = true);
     } catch (e) {
       debugPrint('Player error: $e');
       if (mounted) setState(() => _failed = true);
     }
   }
 
-  Future<void> _tryResume() async {
-    final progress = widget.item.mediaType == 'tv'
-        ? await _wp.loadEpisode(
-            widget.item.id,
-            widget.season ?? 1,
-            widget.episode ?? 1,
-          )
-        : await _wp.loadMovie(widget.item.id);
-
-    if (progress != null && progress.isResumable && mounted) {
-      final resumePos = Duration(milliseconds: progress.positionMs);
-      if (_duration.inMilliseconds > 0) {
-        _player.seek(resumePos);
-      } else {
-        // Wait for duration, then seek
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (mounted && _duration.inMilliseconds > 0) {
-          _player.seek(resumePos);
-        }
-      }
-    }
-  }
+  String _phaseText() => switch (_phase) {
+        TorrentPhase.engine => 'Starting engine…',
+        TorrentPhase.metadata => _isTorrent ? 'Fetching torrent info…' : 'Loading…',
+        TorrentPhase.peers => 'Connecting to peers…',
+        TorrentPhase.ready => 'Starting…',
+        TorrentPhase.error => 'Failed',
+      };
 
   Future<void> _saveProgress() async {
     if (_duration.inMilliseconds <= 0 || _position.inMilliseconds < 0) return;
@@ -168,6 +164,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
         durationMs: _duration.inMilliseconds,
         title: widget.title,
       );
+    }
+  }
+
+  Future<void> _tryResume() async {
+    final progress = widget.item.mediaType == 'tv'
+        ? await _wp.loadEpisode(widget.item.id, widget.season ?? 1, widget.episode ?? 1)
+        : await _wp.loadMovie(widget.item.id);
+    if (progress != null && progress.isResumable && mounted) {
+      final r = Duration(milliseconds: progress.positionMs);
+      if (_duration.inMilliseconds > 0) {
+        _player.seek(r);
+      } else {
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (mounted && _duration.inMilliseconds > 0) _player.seek(r);
+      }
     }
   }
 
@@ -191,11 +202,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _seekBy(int seconds) {
-    final target = _position + Duration(seconds: seconds);
-    final clamped = target < Duration.zero
+    final t = _position + Duration(seconds: seconds);
+    final c = t < Duration.zero
         ? Duration.zero
-        : (_duration > Duration.zero && target > _duration ? _duration : target);
-    _player.seek(clamped);
+        : (_duration > Duration.zero && t > _duration ? _duration : t);
+    _player.seek(c);
   }
 
   void _toggleOrientationLock() async {
@@ -213,17 +224,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    _saveProgress(); // Save on exit
+    _saveProgress();
     _saveTimer?.cancel();
     _hideTimer?.cancel();
-    _failTimer?.cancel();
+    _watchdog?.cancel();
     for (final s in _subs) {
       s.cancel();
     }
-    if (_isTorrent) {
-      _torrentService.cleanup();
-    }
+    _statsSub?.cancel();
+    if (_isTorrent) _torrent.cleanup();
     _player.dispose();
+    _stats.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
@@ -244,24 +255,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
           ),
-          if (_buffering && !_failed)
+          // BEFORE playback: clean phase loader (torrent) or simple spinner
+          if (!_opened && !_failed)
             Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const CircularProgressIndicator(),
-                  if (_isTorrent && _torrentStats != null) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      'Downloading: ${(_torrentStats!.progress * 100).toStringAsFixed(1)}%',
-                      style: const TextStyle(color: Colors.white70),
+                  const CircularProgressIndicator(strokeWidth: 2),
+                  const SizedBox(height: 14),
+                  Text(_phaseText(), style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  if (_isTorrent)
+                    ValueListenableBuilder<TorrentStats?>(
+                      valueListenable: _stats,
+                      builder: (c, s, _) => s == null
+                          ? const SizedBox.shrink()
+                          : Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                '${s.speedLabel} • ${s.activePeers} peers',
+                                style: const TextStyle(color: Colors.white38, fontSize: 11),
+                              ),
+                            ),
                     ),
-                    Text(
-                      'Speed: ${_torrentStats!.speedLabel} • Peers: ${_torrentStats!.activePeers}',
-                      style: const TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                  ],
                 ],
+              ),
+            ),
+          // DURING playback: tiny silent spinner on stalls only (no text)
+          if (_opened && _buffering && !_failed)
+            const Center(
+              child: Opacity(
+                opacity: 0.5,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
               ),
             ),
           if (_failed)
@@ -271,7 +295,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 children: [
                   const Icon(Icons.error_outline, size: 48, color: Colors.orangeAccent),
                   const SizedBox(height: 8),
-                  Text(_isTorrent ? 'Failed to start torrent stream' : 'Stream failed to load'),
+                  const Text('Stream failed to load', style: TextStyle(color: Colors.white70)),
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: _open,
@@ -333,13 +357,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           Expanded(
                             child: Slider(
                               value: _duration.inMilliseconds > 0
-                                  ? _position.inMilliseconds
-                                      .clamp(0, _duration.inMilliseconds)
-                                      .toDouble()
+                                  ? _position.inMilliseconds.clamp(0, _duration.inMilliseconds).toDouble()
                                   : 0,
-                              max: _duration.inMilliseconds > 0
-                                  ? _duration.inMilliseconds.toDouble()
-                                  : 1,
+                              max: _duration.inMilliseconds > 0 ? _duration.inMilliseconds.toDouble() : 1,
                               onChanged: _duration.inMilliseconds > 0
                                   ? (v) => _player.seek(Duration(milliseconds: v.toInt()))
                                   : null,
@@ -350,19 +370,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       ),
                       Row(
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.replay_10),
-                            onPressed: () => _seekBy(-10),
-                          ),
+                          IconButton(icon: const Icon(Icons.replay_10), onPressed: () => _seekBy(-10)),
                           IconButton(
                             icon: Icon(_playing ? Icons.pause : Icons.play_arrow, size: 36),
                             onPressed: () => _player.playOrPause(),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.forward_10),
-                            onPressed: () => _seekBy(10),
-                          ),
+                          IconButton(icon: const Icon(Icons.forward_10), onPressed: () => _seekBy(10)),
                           const Spacer(),
+                          if (_isTorrent)
+                            ValueListenableBuilder<TorrentStats?>(
+                              valueListenable: _stats,
+                              builder: (c, s, _) => s == null
+                                  ? const SizedBox.shrink()
+                                  : Padding(
+                                      padding: const EdgeInsets.only(right: 10),
+                                      child: Text(
+                                        '${s.speedLabel} • ${s.activePeers}',
+                                        style: const TextStyle(fontSize: 11, color: Colors.white60),
+                                      ),
+                                    ),
+                            ),
                           Icon(_volume == 0 ? Icons.volume_off : Icons.volume_down, size: 18),
                           SizedBox(
                             width: 90,
@@ -375,15 +402,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           PopupMenuButton<double>(
                             onSelected: (v) => _player.setRate(v),
                             itemBuilder: (_) => [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-                                .map((v) => PopupMenuItem(
-                                      value: v,
-                                      child: Text('${v}x'),
-                                    ))
+                                .map((v) => PopupMenuItem(value: v, child: Text('${v}x')))
                                 .toList(),
                             child: Padding(
                               padding: const EdgeInsets.all(8),
-                              child: Text('${_rate}x',
-                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                              child: Text('${_rate}x', style: const TextStyle(fontWeight: FontWeight.bold)),
                             ),
                           ),
                         ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'theme/app_theme.dart';
+import 'services/torrent/torrent_service.dart';
 import 'screens/setup_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/search_screen.dart';
@@ -10,6 +11,7 @@ import 'screens/addons_screen.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  TorrentService().initialize();
   runApp(const MyApp());
 }
 
