@@ -63,7 +63,7 @@ class PosterCard extends StatelessWidget {
                             value: progress,
                             minHeight: 3,
                             backgroundColor: const Color(0x55FFFFFF),
-                            valueColor: const AlwaysSlowAnimation<Color>(AppTheme.accent),
+                            valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.accent),
                           ),
                         ),
                       Positioned(
