@@ -12,18 +12,20 @@ jobs:
       - name: Ensure Android project exists
         run: |
           flutter create --org com.nebula --project-name nebula --platforms android .
-          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application\n        android:usesCleartextTraffic="true"|' android/app/src/main/AndroidManifest.xml
-          if [ -f android/app/build.gradle ]; then sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 36/' android/app/build.gradle; fi
+          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <application\n        android:usesCleartextTraffic="true"|' android/app/src/main/AndroidManifest.xml
           if [ -f android/app/build.gradle.kts ]; then sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts; fi
+          if [ -f android/app/build.gradle.kts ]; then grep -q useLegacyPackaging android/app/build.gradle.kts || sed -i '/^android {/a\    packaging { jniLibs.useLegacyPackaging = true }' android/app/build.gradle.kts; fi
+          if [ -f android/app/build.gradle ]; then sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 36/' android/app/build.gradle; fi
+          if [ -f android/app/build.gradle ]; then grep -q useLegacyPackaging android/app/build.gradle || sed -i '/^android {/a\    packagingOptions { jniLibs.useLegacyPackaging = true }' android/app/build.gradle; fi
+          echo "=== MANIFEST ==="
+          cat android/app/src/main/AndroidManifest.xml
       - run: flutter clean
       - run: flutter pub get
-      - name: Icon and splash (only if icon exists)
+      - name: Icon and splash
         run: |
           if [ -f assets/icon.png ]; then
-            dart run flutter_launcher_icons
-            dart run flutter_native_splash:create
-          else
-            echo "No icon asset, skipping icon/splash"
+            dart run flutter_launcher_icons || echo "icon gen skipped"
+            dart run flutter_native_splash:create || echo "splash gen skipped"
           fi
       - run: flutter build apk --release --split-per-abi
       - uses: actions/upload-artifact@v4

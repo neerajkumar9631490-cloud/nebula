@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/stream_result.dart';
 import '../models/media_item.dart';
 import '../services/torrent/torrent_service.dart';
@@ -94,9 +95,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _watchdog = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!mounted) return;
       final now = DateTime.now().millisecondsSinceEpoch;
-      if (!_opened && now - _openedAt > 60000) {
+      if (!_opened && now - _openedAt > 120000) {
         setState(() => _failed = true);
-      } else if (_opened && !_playing && _duration == Duration.zero && now - _openedAt > 25000) {
+      } else if (_opened && !_playing && _duration == Duration.zero && now - _openedAt > 45000) {
         setState(() => _failed = true);
       }
     });
@@ -132,6 +133,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       await _player.open(Media(url!));
       if (mounted) setState(() => _opened = true);
+      await _tryResume();
     } catch (e) {
       debugPrint('Player error: $e');
       if (mounted) setState(() => _failed = true);
@@ -143,8 +145,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
         TorrentPhase.metadata => _isTorrent ? 'Fetching torrent info…' : 'Loading…',
         TorrentPhase.peers => 'Connecting to peers…',
         TorrentPhase.ready => 'Starting…',
-        TorrentPhase.error => 'Failed',
+        TorrentPhase.error => 'Engine could not start',
       };
+
+  Future<void> _tryResume() async {
+    final progress = widget.item.mediaType == 'tv'
+        ? await _wp.loadEpisode(widget.item.id, widget.season ?? 1, widget.episode ?? 1)
+        : await _wp.loadMovie(widget.item.id);
+    if (progress != null && progress.isResumable && mounted) {
+      final r = Duration(milliseconds: progress.positionMs);
+      if (_duration.inMilliseconds > 0) {
+        _player.seek(r);
+      } else {
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (mounted && _duration.inMilliseconds > 0) _player.seek(r);
+      }
+    }
+  }
 
   Future<void> _saveProgress() async {
     if (_duration.inMilliseconds <= 0 || _position.inMilliseconds < 0) return;
@@ -164,21 +181,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         durationMs: _duration.inMilliseconds,
         title: widget.title,
       );
-    }
-  }
-
-  Future<void> _tryResume() async {
-    final progress = widget.item.mediaType == 'tv'
-        ? await _wp.loadEpisode(widget.item.id, widget.season ?? 1, widget.episode ?? 1)
-        : await _wp.loadMovie(widget.item.id);
-    if (progress != null && progress.isResumable && mounted) {
-      final r = Duration(milliseconds: progress.positionMs);
-      if (_duration.inMilliseconds > 0) {
-        _player.seek(r);
-      } else {
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted && _duration.inMilliseconds > 0) _player.seek(r);
-      }
     }
   }
 
@@ -222,6 +224,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  void _openExternal() async {
+    final m = widget.result.magnet;
+    if (m == null) return;
+    final uri = Uri.parse(m);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   void dispose() {
     _saveProgress();
@@ -255,7 +266,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
           ),
-          // BEFORE playback: clean phase loader (torrent) or simple spinner
           if (!_opened && !_failed)
             Center(
               child: Column(
@@ -280,7 +290,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ],
               ),
             ),
-          // DURING playback: tiny silent spinner on stalls only (no text)
           if (_opened && _buffering && !_failed)
             const Center(
               child: Opacity(
@@ -290,19 +299,43 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
           if (_failed)
             Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.orangeAccent),
-                  const SizedBox(height: 8),
-                  const Text('Stream failed to load', style: TextStyle(color: Colors.white70)),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: _open,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Retry'),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 48, color: Colors.orangeAccent),
+                    const SizedBox(height: 8),
+                    const Text('Stream failed to load', style: TextStyle(color: Colors.white70)),
+                    if (_isTorrent) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Last stage: ${_phaseText()}\nTip: pick a source with more peers (4K/1080p with many seeders).',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white38, fontSize: 12),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: _open,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                        ),
+                        if (_isTorrent && widget.result.magnet != null) ...[
+                          const SizedBox(width: 8),
+                          TextButton.icon(
+                            onPressed: _openExternal,
+                            icon: const Icon(Icons.open_in_new),
+                            child: const Text('External'),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           if (_controlsVisible && !_failed)
