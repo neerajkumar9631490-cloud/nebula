@@ -3,17 +3,30 @@ import 'package:flutter/material.dart';
 class AppTheme {
   AppTheme._();
 
-  // Palette extracted from reference image: charcoal + monochrome gray
-  static const Color bg = Color(0xFF121212);
-  static const Color surface = Color(0xFF191919);
-  static const Color card = Color(0xFF1F1F1F);
-  static const Color cardHi = Color(0xFF2A2A2A);
-  static const Color stroke = Color(0xFF333333);
-  static const Color text = Color(0xFFEDEDED);
-  static const Color textDim = Color(0xFF9C9C9C);
-  static const Color accent = Color(0xFFE6E6E6);
-  static const Color onAccent = Color(0xFF121212);
-  static const Color warn = Color(0xFFFF8A3D);
+  // Movix emerald-glass palette (from the green icon)
+  static const Color bg = Color(0xFF06130C);
+  static const Color surface = Color(0xFF0B1F15);
+  static const Color card = Color(0x14FFFFFF);
+  static const Color cardHi = Color(0x24FFFFFF);
+  static const Color stroke = Color(0x2EFFFFFF);
+  static const Color text = Color(0xFFF1FBF5);
+  static const Color textDim = Color(0xFF9DBBA8);
+  static const Color accent = Color(0xFF2FD97C);
+  static const Color accentDeep = Color(0xFF0E9F6E);
+  static const Color onAccent = Color(0xFF04240F);
+  static const Color warn = Color(0xFFFFB454);
+
+  static const LinearGradient glassGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0x26FFFFFF), Color(0x0DFFFFFF)],
+  );
+
+  static const LinearGradient accentGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF3BE488), Color(0xFF0E9F6E)],
+  );
 
   static ThemeData get theme {
     final base = ThemeData(
@@ -45,11 +58,11 @@ class AppTheme {
         iconTheme: IconThemeData(color: text),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: surface,
-        selectedItemColor: text,
+        backgroundColor: Color(0xE60B1F15),
+        selectedItemColor: accent,
         unselectedItemColor: textDim,
         type: BottomNavigationBarType.fixed,
-        elevation: 8,
+        elevation: 0,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -57,12 +70,12 @@ class AppTheme {
           foregroundColor: onAccent,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: textDim),
+        style: TextButton.styleFrom(foregroundColor: accent),
       ),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(foregroundColor: text),
@@ -73,23 +86,14 @@ class AppTheme {
         hintStyle: const TextStyle(color: textDim),
         prefixIconColor: textDim,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: stroke),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: accent, width: 1.2),
         ),
       ),
-      snackBarTheme: const SnackBarThemeData(
-        backgroundColor: cardHi,
-        behavior: SnackBarBehavior.floating,
-      ),
+      snackBarTheme: const SnackBarThemeData(backgroundColor: cardHi, behavior: SnackBarBehavior.floating),
       dividerColor: stroke,
       popupMenuTheme: const PopupMenuThemeData(color: cardHi),
     );

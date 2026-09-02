@@ -179,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('NEBULA', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 4)),
+        title: const Text('MOVIX', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 4)),
         actions: [
           IconButton(
             icon: const Icon(Icons.key_off_rounded),

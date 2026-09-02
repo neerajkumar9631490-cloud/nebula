@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/stream_result.dart';
 import '../models/media_item.dart';
 import '../services/torrent/torrent_service.dart';
@@ -62,10 +63,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    WakelockPlus.enable();
 
-    _player = Player(
-      configuration: PlayerConfiguration(bufferSize: 32 * 1024 * 1024),
-    );
+    _player = Player(configuration: PlayerConfiguration(bufferSize: 32 * 1024 * 1024));
     _videoController = VideoController(_player);
 
     _subs.add(_player.streams.playing.listen((v) {
@@ -95,7 +95,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _watchdog = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!mounted) return;
       final now = DateTime.now().millisecondsSinceEpoch;
-      if (!_opened && now - _openedAt > 120000) {
+      if (!_opened && now - _openedAt > (_isTorrent ? 90000 : 60000)) {
         setState(() => _failed = true);
       } else if (_opened && !_playing && _duration == Duration.zero && now - _openedAt > 45000) {
         setState(() => _failed = true);
@@ -123,9 +123,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           },
         );
         if (url == null) {
-          if (mounted) setState(() { _failed = true; });
+          if (mounted) setState(() => _failed = true);
           return;
         }
+        _statsSub?.cancel();
         _statsSub = _torrent.statsStream(widget.result.magnet!).listen((s) {
           _stats.value = s;
         });
@@ -246,6 +247,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_isTorrent) _torrent.cleanup();
     _player.dispose();
     _stats.dispose();
+    WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
@@ -260,10 +262,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           GestureDetector(
             onTap: _toggleControls,
             child: Center(
-              child: Video(
-                controller: _videoController,
-                controls: (state) => const SizedBox.shrink(),
-              ),
+              child: Video(controller: _videoController, controls: (state) => const SizedBox.shrink()),
             ),
           ),
           if (!_opened && !_failed)
@@ -310,7 +309,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     if (_isTorrent) ...[
                       const SizedBox(height: 6),
                       Text(
-                        'Last stage: ${_phaseText()}\nTip: pick a source with more peers (4K/1080p with many seeders).',
+                        'Last stage: ${_phaseText()}\nTip: pick a source with more peers.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: Colors.white38, fontSize: 12),
                       ),
@@ -328,7 +327,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           const SizedBox(width: 8),
                           TextButton.icon(
                             onPressed: _openExternal,
-                            icon: const Icon(Icons.open_in_new),
+                            icon: const Icon(Icons.open_in_new, size: 18),
                             label: const Text('External'),
                           ),
                         ],
@@ -350,17 +349,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   bottom: false,
                   child: Row(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back),
-                        onPressed: () => Navigator.pop(context),
-                      ),
+                      IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
                       Expanded(
-                        child: Text(
-                          widget.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
+                        child: Text(widget.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
                       ),
                       IconButton(
                         icon: Icon(_orientationLocked ? Icons.screen_lock_rotation : Icons.screen_rotation),

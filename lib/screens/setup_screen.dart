@@ -47,7 +47,7 @@ class _SetupScreenState extends State<SetupScreen> {
               ),
               const SizedBox(height: 24),
               const Text(
-                'NEBULA',
+                'MOVIX',
                 style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: 6, color: AppTheme.text),
               ),
               const SizedBox(height: 8),

@@ -1,5 +1,6 @@
 name: Build APK
 on: [push, workflow_dispatch]
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -9,27 +10,37 @@ jobs:
         with:
           channel: stable
           flutter-version: '3.47.2'
-      - name: Ensure Android project exists
+
+      - name: Regenerate Android project as Movix
         run: |
-          flutter create --org com.nebula --project-name nebula --platforms android .
-          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <application\n        android:usesCleartextTraffic="true"|' android/app/src/main/AndroidManifest.xml
-          if [ -f android/app/build.gradle.kts ]; then sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts; fi
-          if [ -f android/app/build.gradle.kts ]; then grep -q useLegacyPackaging android/app/build.gradle.kts || sed -i '/^android {/a\    packaging { jniLibs.useLegacyPackaging = true }' android/app/build.gradle.kts; fi
-          if [ -f android/app/build.gradle ]; then sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 36/' android/app/build.gradle; fi
-          if [ -f android/app/build.gradle ]; then grep -q useLegacyPackaging android/app/build.gradle || sed -i '/^android {/a\    packagingOptions { jniLibs.useLegacyPackaging = true }' android/app/build.gradle; fi
-          echo "=== MANIFEST ==="
-          cat android/app/src/main/AndroidManifest.xml
+          rm -rf android
+          flutter create --org com.movix --project-name movix --platforms android .
+
       - run: flutter clean
       - run: flutter pub get
-      - name: Icon and splash
+
+      - name: Icon and splash (only if icon exists)
         run: |
           if [ -f assets/icon.png ]; then
-            dart run flutter_launcher_icons || echo "icon gen skipped"
-            dart run flutter_native_splash:create || echo "splash gen skipped"
+            dart run flutter_launcher_icons
+            dart run flutter_native_splash:create
+          else
+            echo "No icon asset, skipping icon/splash"
           fi
+
+      - name: Patch manifest AFTER icon/splash (TorrServer fix)
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.INTERNET' $M || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n        <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n        <uses-permission android:name="android.permission.WAKE_LOCK"/>\n        <application|' $M
+          grep -q 'usesCleartextTraffic' $M || sed -i 's|<application|<application android:usesCleartextTraffic="true"|' $M
+          grep -q 'extractNativeLibs' $M || sed -i 's|<application|<application android:extractNativeLibs="true"|' $M
+          sed -i 's|android:label="[^"]*"|android:label="Movix"|' $M
+          echo "=== PATCHED MANIFEST ==="
+          cat $M
+
       - run: flutter build apk --release --split-per-abi
       - uses: actions/upload-artifact@v4
         with:
-          name: nebula-apk
+          name: movix-apk
           path: build/app/outputs/flutter-apk/*.apk
           retention-days: 30

@@ -35,7 +35,7 @@ class TorrentService {
   Future<bool> initialize() async {
     if (_isInitialized && _controller.isRunning) return true;
     if (_isStarting) {
-      for (int i = 0; i < 50; i++) {
+      for (int i = 0; i < 100; i++) {
         await Future.delayed(const Duration(milliseconds: 100));
         if (_isInitialized && _controller.isRunning) return true;
       }
@@ -52,7 +52,18 @@ class TorrentService {
     } catch (e) {
       debugPrint('[Torrent] engine start failed: $e');
       _isStarting = false;
-      return false;
+      _isInitialized = false;
+      try {
+        await Future.delayed(const Duration(milliseconds: 800));
+        await _controller.start();
+        await _controller.echo();
+        _isInitialized = true;
+        debugPrint('[Torrent] engine ready (retry)');
+        return true;
+      } catch (e2) {
+        debugPrint('[Torrent] engine retry failed: $e2');
+        return false;
+      }
     }
   }
 
@@ -63,7 +74,7 @@ class TorrentService {
 
   Future<List<TorrentFileStat>?> _waitForMetadata(String hash) async {
     final sw = Stopwatch()..start();
-    while (sw.elapsed < const Duration(seconds: 30)) {
+    while (sw.elapsed < const Duration(seconds: 45)) {
       try {
         final info = await _controller.getTorrent(hash);
         if (info.fileStats.isNotEmpty) return info.fileStats;
@@ -75,8 +86,11 @@ class TorrentService {
 
   bool _isMedia(String n) {
     final l = n.toLowerCase();
-    return l.endsWith('.mp4') || l.endsWith('.mkv') || l.endsWith('.avi') ||
-        l.endsWith('.webm') || l.endsWith('.mov');
+    return l.endsWith('.mp4') ||
+        l.endsWith('.mkv') ||
+        l.endsWith('.avi') ||
+        l.endsWith('.webm') ||
+        l.endsWith('.mov');
   }
 
   int? _selectFile(List<TorrentFileStat> files, {int? preferredIdx}) {
@@ -87,8 +101,7 @@ class TorrentService {
     }
     final media = files.where((f) => _isMedia(f.path)).toList();
     final pool = media.isEmpty ? files : media;
-    final sorted = List<TorrentFileStat>.from(pool)
-      ..sort((a, b) => b.length.compareTo(a.length));
+    final sorted = List<TorrentFileStat>.from(pool)..sort((a, b) => b.length.compareTo(a.length));
     return sorted.first.id;
   }
 
@@ -96,9 +109,9 @@ class TorrentService {
     String hash, {
     void Function(TorrentPhase, TorrentStats?)? onPhase,
   }) async {
-    const minBytes = 4 * 1024 * 1024;
+    const minBytes = 2 * 1024 * 1024;
     final sw = Stopwatch()..start();
-    while (sw.elapsed < const Duration(seconds: 25)) {
+    while (sw.elapsed < const Duration(seconds: 30)) {
       try {
         final info = await _controller.getTorrent(hash);
         final stats = TorrentStats(
@@ -109,9 +122,7 @@ class TorrentService {
         );
         onPhase?.call(TorrentPhase.peers, stats);
         if (info.loadedSize >= minBytes ||
-            (info.torrentSize > 0 &&
-                info.loadedSize / info.torrentSize >= 0.01 &&
-                info.downloadSpeed > 0)) {
+            (info.torrentSize > 0 && info.loadedSize / info.torrentSize >= 0.01 && info.downloadSpeed > 0)) {
           return true;
         }
       } catch (_) {}
@@ -135,26 +146,31 @@ class TorrentService {
       onPhase?.call(TorrentPhase.error, null);
       return null;
     }
+
     final hash = _extractHash(magnet);
     if (hash == null) {
       onPhase?.call(TorrentPhase.error, null);
       return null;
     }
+
     try {
       onPhase?.call(TorrentPhase.metadata, null);
       final added = await _controller.addTorrent(magnet: magnet, title: null, saveToDb: false);
       final th = added.hash.isNotEmpty ? added.hash.toLowerCase() : hash;
       _active.add(th);
+
       final files = await _waitForMetadata(th);
       if (files == null || files.isEmpty) {
         onPhase?.call(TorrentPhase.error, null);
         return null;
       }
+
       final fileId = _selectFile(files, preferredIdx: fileIndex);
       if (fileId == null) {
         onPhase?.call(TorrentPhase.error, null);
         return null;
       }
+
       await _prebuffer(th, onPhase: onPhase);
       onPhase?.call(TorrentPhase.ready, null);
       return _controller.streamUrl(th, fileIndex: fileId).toString();
