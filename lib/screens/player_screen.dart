@@ -329,7 +329,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           TextButton.icon(
                             onPressed: _openExternal,
                             icon: const Icon(Icons.open_in_new),
-                            child: const Text('External'),
+                            label: const Text('External'),
                           ),
                         ],
                       ],
