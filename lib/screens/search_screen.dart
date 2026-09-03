@@ -101,6 +101,9 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
+  void _open(MediaItem item) => Navigator.push(context,
+      MaterialPageRoute(builder: (_) => DetailScreen(item: item, apiKey: widget.apiKey)));
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -183,7 +186,8 @@ class _SearchScreenState extends State<SearchScreen> {
             child: Row(
               children: [
                 const Text('Recent',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.text)),
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.text)),
                 const Spacer(),
                 TextButton.icon(
                   onPressed: _clearRecent,
@@ -193,18 +197,20 @@ class _SearchScreenState extends State<SearchScreen> {
               ],
             ),
           ),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            children: _recent
-                .map((q) => ActionChip(
-                    label: Text(q),
-                    onPressed: () {
-                      _controller.text = q;
-                      _search(q);
-                    }))
-                .toList(),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _recent
+                  .map((q) => ActionChip(
+                      label: Text(q),
+                      onPressed: () {
+                        _controller.text = q;
+                        _search(q);
+                      }))
+                  .toList(),
+            ),
           ),
         ],
         Padding(
@@ -214,22 +220,25 @@ class _SearchScreenState extends State<SearchScreen> {
               Icon(Icons.local_fire_department_rounded, color: Color(0xFFFF7A2F), size: 20),
               SizedBox(width: 6),
               Text('Everyone is searching',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.text)),
+                  style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.text)),
             ],
           ),
         ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          children: _suggestions
-              .map((q) => ActionChip(
-                  label: Text(q),
-                  onPressed: () {
-                    _controller.text = q;
-                    _search(q);
-                  }))
-              .toList(),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _suggestions
+                .map((q) => ActionChip(
+                    label: Text(q),
+                    onPressed: () {
+                      _controller.text = q;
+                      _search(q);
+                    }))
+                .toList(),
+          ),
         ),
         SectionHeader(title: 'Hot Movies'),
         SizedBox(
@@ -242,8 +251,7 @@ class _SearchScreenState extends State<SearchScreen> {
             itemBuilder: (c, i) => SizedBox(
               width: 138,
               child: GestureDetector(
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => DetailScreen(item: _hot[i], apiKey: widget.apiKey))),
+                onTap: () => _open(_hot[i]),
                 child: PosterCard(item: _hot[i], apiKey: widget.apiKey, rank: i + 1),
               ),
             ),
@@ -261,8 +269,7 @@ class _SearchScreenState extends State<SearchScreen> {
       itemBuilder: (c, i) {
         final item = _results[i];
         return GestureDetector(
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => DetailScreen(item: item, apiKey: widget.apiKey))),
+          onTap: () => _open(item),
           child: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -275,8 +282,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 Container(
                   width: 62,
                   height: 92,
-                  decoration:
-                      BoxDecoration(borderRadius: BorderRadius.circular(10), color: AppTheme.cardHi),
+                  decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10), color: AppTheme.cardHi),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: Stack(
