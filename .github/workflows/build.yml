@@ -1,6 +1,5 @@
 name: Build Movix APK
 on: [push, workflow_dispatch]
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -10,29 +9,24 @@ jobs:
         with:
           channel: stable
           flutter-version: '3.47.2'
-
       - name: Regenerate Android project as Movix
         run: |
           rm -rf android
           flutter create --org com.movix --project-name movix --platforms android .
-
       - run: flutter clean
       - run: flutter pub get
-
       - name: Icon and splash
         run: |
           if [ -f assets/icon.png ]; then
             dart run flutter_launcher_icons
             dart run flutter_native_splash:create
           fi
-
       - name: Patch Android (TorrServer network + AGP 8 legacy libs)
         run: |
           M=android/app/src/main/AndroidManifest.xml
-          grep -q 'android.permission.INTERNET' $M || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <application|' $M
+          grep -q 'android.permission.INTERNET' $M || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/><uses-permission android:name="android.permission.WAKE_LOCK"/><application|' $M
           grep -q 'usesCleartextTraffic' $M || sed -i 's|<application|<application android:usesCleartextTraffic="true"|' $M
           sed -i 's|android:label="[^"]*"|android:label="Movix"|' $M
-          
           G=android/app/build.gradle.kts
           if [ -f "$G" ]; then
             sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' $G
@@ -43,7 +37,6 @@ jobs:
             sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 36/' $G2
             grep -q 'useLegacyPackaging' $G2 || sed -i '/android {/a \    packagingOptions { jniLibs.useLegacyPackaging = true }' $G2
           fi
-
       - run: flutter build apk --release --split-per-abi
       - uses: actions/upload-artifact@v4
         with:
