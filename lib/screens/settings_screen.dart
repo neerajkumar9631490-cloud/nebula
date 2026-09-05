@@ -348,20 +348,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Row(
             children: [
               Container(
-                width: 52,
-                height: 52,
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
-                  gradient: AppTheme.accentGradient,
                   shape: BoxShape.circle,
+                  border: Border.all(
+                      color: AppTheme.accent.withOpacity(0.55), width: 2),
                   boxShadow: AppTheme.glowShadow,
                 ),
-                child: const Center(
-                  child: Text('NGX',
-                      style: TextStyle(
-                          color: AppTheme.onAccent,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                          letterSpacing: 1)),
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/developer_logo.jpg',
+                    fit: BoxFit.cover,
+                    filterQuality: FilterQuality.high,
+                    errorBuilder: (c, e, s) => Container(
+                      color: AppTheme.accent,
+                      child: const Center(
+                        child: Text('NGX',
+                            style: TextStyle(
+                                color: AppTheme.onAccent,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 16,
+                                letterSpacing: 1)),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 13),

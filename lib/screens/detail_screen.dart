@@ -226,7 +226,12 @@ class _DetailScreenState extends State<DetailScreen> {
                                   ? CachedNetworkImage(
                                       imageUrl:
                                           service.getImgUrl(widget.item.posterPath),
-                                      fit: BoxFit.cover,
+                                      // Contain (not cover) so the entire
+                                      // poster is always visible regardless
+                                      // of source aspect — standard 2:3
+                                      // posters render pixel-identical.
+                                      fit: BoxFit.contain,
+                                      alignment: Alignment.center,
                                       memCacheWidth: 360,
                                     )
                                   : const Center(
