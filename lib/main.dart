@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'theme/app_theme.dart';
+import 'widgets/app_logo.dart';
 import 'services/torrent/torrent_service.dart';
 import 'screens/setup_screen.dart';
 import 'screens/home_screen.dart';
@@ -129,16 +130,7 @@ class _SplashScreenState extends State<_SplashScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(26),
-                    decoration: BoxDecoration(
-                      gradient: AppTheme.accentGradient,
-                      shape: BoxShape.circle,
-                      boxShadow: AppTheme.glowShadow,
-                    ),
-                    child: const Icon(Icons.play_arrow_rounded,
-                        size: 54, color: AppTheme.onAccent),
-                  ),
+                  const AppLogo(size: 112, radius: 30),
                   const SizedBox(height: 22),
                   const Text('MOVIX',
                       style: TextStyle(

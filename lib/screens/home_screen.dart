@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_logo.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/poster_card.dart';
 import '../widgets/section_header.dart';
@@ -545,15 +546,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   backgroundColor: AppTheme.bg.withOpacity(0.85),
                   title: Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          gradient: AppTheme.accentGradient,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.play_arrow_rounded,
-                            size: 16, color: AppTheme.onAccent),
-                      ),
+                      const AppLogo(size: 32, radius: 9, glow: false),
                       const SizedBox(width: 10),
                       const Text('MOVIX',
                           style: TextStyle(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/tmdb_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_logo.dart';
 import '../widgets/glass_card.dart';
 
 class SetupScreen extends StatefulWidget {
@@ -91,16 +92,7 @@ class _SetupScreenState extends State<SetupScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          gradient: AppTheme.accentGradient,
-                          shape: BoxShape.circle,
-                          boxShadow: AppTheme.glowShadow,
-                        ),
-                        child: const Icon(Icons.play_arrow_rounded,
-                            size: 52, color: AppTheme.onAccent),
-                      ),
+                      const AppLogo(size: 96, radius: 26),
                       const SizedBox(height: 24),
                       const Text(
                         'MOVIX',

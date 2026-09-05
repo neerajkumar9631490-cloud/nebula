@@ -17,7 +17,7 @@ jobs:
       - run: flutter pub get
       - name: Icon and splash
         run: |
-          if [ -f assets/icon.png ]; then
+          if [ -f assets/logo.png ]; then
             dart run flutter_launcher_icons
             dart run flutter_native_splash:create
           fi

@@ -77,16 +77,23 @@ class _DetailScreenState extends State<DetailScreen> {
   Widget build(BuildContext context) {
     final service = TMDBService(widget.apiKey);
     final isTv = widget.item.mediaType == 'tv';
-    final backdrop = widget.item.backdropPath != null
+    final hasBackdrop = widget.item.backdropPath != null;
+    final backdrop = hasBackdrop
         ? service.getImgUrl(widget.item.backdropPath)
         : (widget.item.posterPath != null ? service.getImgUrl(widget.item.posterPath) : null);
+    // Size the banner to the 16:9 backdrop aspect so a true backdrop
+    // fits with zero cropping. Clamped to stay cinematic on tablets
+    // and compact on small phones. Portrait posters never stretch as
+    // a banner — they render fully-visible (contain) below instead.
+    final double bannerH =
+        (MediaQuery.of(context).size.width * 9 / 16).clamp(230.0, 320.0).toDouble();
 
     return Scaffold(
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
           SliverAppBar(
-            expandedHeight: 320,
+            expandedHeight: bannerH,
             pinned: true,
             stretch: true,
             backgroundColor: AppTheme.bg,
@@ -112,18 +119,56 @@ class _DetailScreenState extends State<DetailScreen> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (backdrop != null)
+                  if (hasBackdrop && backdrop != null)
                     CachedNetworkImage(
                       imageUrl: backdrop,
-                      // Pin the crop to the top so faces/logos in the
-                      // banner are never cut off; excess crops at the
-                      // bottom where the scrim fade already blends out.
+                      // Banner is 16:9 like the image, so cover fits
+                      // without cutting; topCenter keeps faces/logos
+                      // safe if a backdrop ever differs in aspect.
                       fit: BoxFit.cover,
                       alignment: Alignment.topCenter,
                       memCacheWidth: 1000,
                       fadeInDuration: AppTheme.med,
                       placeholder: (c, u) => Container(color: AppTheme.bgHi),
                       errorWidget: (c, u, e) => Container(color: AppTheme.bgHi),
+                    )
+                  else if (backdrop != null)
+                    Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF0B1F15), AppTheme.bg],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: Center(
+                        // Portrait poster shown fully (contain) —
+                        // never stretched or cropped as a banner.
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                              0, MediaQuery.of(context).padding.top + 8, 0, 64),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppTheme.strokeHi),
+                              boxShadow: AppTheme.cardShadow,
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: CachedNetworkImage(
+                                imageUrl: backdrop,
+                                fit: BoxFit.contain,
+                                memCacheHeight: 520,
+                                fadeInDuration: AppTheme.med,
+                                placeholder: (c, u) =>
+                                    Container(color: AppTheme.bgHi),
+                                errorWidget: (c, u, e) =>
+                                    Container(color: AppTheme.bgHi),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     )
                   else
                     Container(

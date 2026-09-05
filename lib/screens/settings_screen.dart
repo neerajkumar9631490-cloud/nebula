@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/stremio/addon_manager.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_logo.dart';
 import '../widgets/glass_card.dart';
 import 'addons_screen.dart';
 
@@ -294,16 +295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: AppTheme.accentGradient,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: AppTheme.glowShadow,
-            ),
-            child: const Icon(Icons.play_arrow_rounded,
-                size: 30, color: AppTheme.onAccent),
-          ),
+          const AppLogo(size: 56, radius: 16),
           const SizedBox(width: 14),
           const Expanded(
             child: Column(

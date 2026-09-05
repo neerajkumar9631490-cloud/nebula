@@ -28,15 +28,17 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/logo.png
 
 flutter_launcher_icons:
   android: true
   ios: false
-  image_path: "assets/icon.png"
+  image_path: "assets/logo.png"
   min_sdk_android: 21
 
 flutter_native_splash:
   color: "#06130C"
-  image: "assets/icon.png"
+  image: "assets/logo.png"
   android: true
   ios: false
