@@ -20,56 +20,61 @@ class PosterCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: AppTheme.card,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.stroke, width: 1),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                item.posterPath != null
-                    ? CachedNetworkImage(
-                        imageUrl: imgUrl,
-                        fit: BoxFit.cover,
-                        memCacheWidth: 300,
-                        placeholder: (c, u) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                        errorWidget: (c, u, e) =>
-                            const Center(child: Icon(Icons.movie_outlined, size: 42, color: AppTheme.textDim)),
-                      )
-                    : const Center(child: Icon(Icons.movie_outlined, size: 42, color: AppTheme.textDim)),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Color(0x66000000), Colors.transparent, Color(0xCC000000)],
-                      stops: [0, 0.25, 1],
+        AspectRatio(
+          aspectRatio: 2 / 3,
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppTheme.cardHi,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.stroke, width: 1),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  item.posterPath != null
+                      ? CachedNetworkImage(
+                          imageUrl: imgUrl,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 300,
+                          placeholder: (c, u) =>
+                              const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                          errorWidget: (c, u, e) => const Center(
+                              child: Icon(Icons.movie_outlined, size: 42, color: AppTheme.textDim)),
+                        )
+                      : const Center(
+                          child: Icon(Icons.movie_outlined, size: 42, color: AppTheme.textDim)),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x66000000), Colors.transparent, Color(0xCC000000)],
+                        stops: [0, 0.25, 1],
+                      ),
                     ),
                   ),
-                ),
-                if (rank != null) Positioned(left: 8, top: 8, child: RankBadge(rank: rank!)),
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: TypeBadge(label: item.mediaType == 'tv' ? 'TV' : 'MOVIE'),
-                ),
-                if (progress != null)
+                  if (rank != null) Positioned(left: 8, top: 8, child: RankBadge(rank: rank!)),
                   Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 3,
-                      backgroundColor: const Color(0x55FFFFFF),
-                      valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.warn),
-                    ),
+                    right: 8,
+                    top: 8,
+                    child: TypeBadge(label: item.mediaType == 'tv' ? 'TV' : 'MOVIE'),
                   ),
-              ],
+                  if (progress != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 3,
+                        backgroundColor: const Color(0x55FFFFFF),
+                        valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.warn),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
