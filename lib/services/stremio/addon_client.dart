@@ -6,6 +6,7 @@ class AddonManifest {
   final String id;
   final String name;
   final String version;
+  final String description;
   final List<String> resources;
   final List<String> types;
   final List<String> idPrefixes;
@@ -14,6 +15,7 @@ class AddonManifest {
     required this.id,
     required this.name,
     required this.version,
+    this.description = '',
     required this.resources,
     required this.types,
     required this.idPrefixes,
@@ -24,6 +26,7 @@ class AddonManifest {
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? 'Unknown add-on',
       version: json['version']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
       resources: (json['resources'] as List? ?? [])
           .map((e) => e is String ? e : (e['name']?.toString() ?? ''))
           .toList(),

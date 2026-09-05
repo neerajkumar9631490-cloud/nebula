@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 /// Movix professional design system.
@@ -154,7 +155,7 @@ class AppTheme {
         elevation: 0,
         selectedLabelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: surface,
         elevation: 0,
         margin: EdgeInsets.zero,
@@ -163,7 +164,7 @@ class AppTheme {
           side: const BorderSide(color: stroke),
         ),
       ),
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: surface,
         elevation: 12,
         shape: RoundedRectangleBorder(
