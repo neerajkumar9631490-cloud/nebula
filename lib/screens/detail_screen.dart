@@ -107,6 +107,7 @@ class _DetailScreenState extends State<DetailScreen> {
               ),
             ),
             flexibleSpace: FlexibleSpaceBar(
+              collapseMode: CollapseMode.pin,
               stretchModes: const [StretchMode.zoomBackground, StretchMode.fadeTitle],
               background: Stack(
                 fit: StackFit.expand,
@@ -114,7 +115,11 @@ class _DetailScreenState extends State<DetailScreen> {
                   if (backdrop != null)
                     CachedNetworkImage(
                       imageUrl: backdrop,
+                      // Pin the crop to the top so faces/logos in the
+                      // banner are never cut off; excess crops at the
+                      // bottom where the scrim fade already blends out.
                       fit: BoxFit.cover,
+                      alignment: Alignment.topCenter,
                       memCacheWidth: 1000,
                       fadeInDuration: AppTheme.med,
                       placeholder: (c, u) => Container(color: AppTheme.bgHi),

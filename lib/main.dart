@@ -7,6 +7,7 @@ import 'screens/setup_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/addons_screen.dart';
+import 'screens/settings_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -72,6 +73,7 @@ class _MyAppState extends State<MyApp> {
                     key: const ValueKey('main'),
                     apiKey: _apiKey!,
                     onResetKey: _resetKey,
+                    onKeyChanged: _saveKey,
                   ),
       ),
     );
@@ -166,8 +168,13 @@ class _SplashScreenState extends State<_SplashScreen>
 class MainShell extends StatefulWidget {
   final String apiKey;
   final VoidCallback onResetKey;
+  final ValueChanged<String> onKeyChanged;
 
-  const MainShell({super.key, required this.apiKey, required this.onResetKey});
+  const MainShell(
+      {super.key,
+      required this.apiKey,
+      required this.onResetKey,
+      required this.onKeyChanged});
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -187,9 +194,19 @@ class _MainShellState extends State<MainShell> {
           key: ValueKey(_tab),
           index: _tab,
           children: [
-            HomeScreen(apiKey: widget.apiKey, onResetKey: widget.onResetKey),
-            SearchScreen(apiKey: widget.apiKey),
+            HomeScreen(
+                key: ValueKey('home-${widget.apiKey}'),
+                apiKey: widget.apiKey,
+                onResetKey: widget.onResetKey),
+            SearchScreen(
+                key: ValueKey('search-${widget.apiKey}'),
+                apiKey: widget.apiKey),
             const AddonsScreen(),
+            SettingsScreen(
+              apiKey: widget.apiKey,
+              onResetKey: widget.onResetKey,
+              onKeyChanged: widget.onKeyChanged,
+            ),
           ],
         ),
       ),
@@ -216,6 +233,11 @@ class _MainShellState extends State<MainShell> {
               icon: Icon(Icons.extension_outlined),
               selectedIcon: Icon(Icons.extension_rounded),
               label: 'Add-ons',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              selectedIcon: Icon(Icons.settings_rounded),
+              label: 'Settings',
             ),
           ],
         ),
