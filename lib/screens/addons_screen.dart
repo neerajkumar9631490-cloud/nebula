@@ -67,6 +67,23 @@ class _AddonsScreenState extends State<AddonsScreen> {
     await _load();
   }
 
+  Widget _capChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+              color: color)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -285,7 +302,21 @@ class _AddonsScreenState extends State<AddonsScreen> {
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                       fontSize: 12, color: AppTheme.textDim)),
-                            ],
+                              if (ok) ...[
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    if (snap.data!.supportsCatalog)
+                                      _capChip('CATALOG', AppTheme.info),
+                                    if (snap.data!.supportsMeta)
+                                      _capChip('META', AppTheme.accentHi),
+                                    if (snap.data!.supportsStream)
+                                      _capChip('STREAMS', AppTheme.warn),
+                                  ],
+                                ),
+                              ],                            ],
                           ),
                         ),
                         Container(

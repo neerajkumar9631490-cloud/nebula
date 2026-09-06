@@ -6,19 +6,10 @@ import '../widgets/app_logo.dart';
 import '../widgets/glass_card.dart';
 import 'addons_screen.dart';
 
-/// Professional Settings hub: streaming plugins, API access,
+/// Professional Settings hub: streaming plugins, catalog source,
 /// storage care, and a crafted About card.
 class SettingsScreen extends StatefulWidget {
-  final String apiKey;
-  final VoidCallback onResetKey;
-  final ValueChanged<String> onKeyChanged;
-
-  const SettingsScreen({
-    super.key,
-    required this.apiKey,
-    required this.onResetKey,
-    required this.onKeyChanged,
-  });
+  const SettingsScreen({super.key});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -47,84 +38,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _refreshCount();
   }
 
-  void _confirmResetKey() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Reset TMDB API key?'),
-        content: const Text(
-            'You will be signed out of the catalog and returned to the setup screen.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              widget.onResetKey();
-            },
-            child: const Text('Reset'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _changeKeyDialog() {
-    final ctrl = TextEditingController(text: widget.apiKey);
-    String? error;
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setD) => AlertDialog(
-          title: const Text('TMDB API key'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Paste a valid v3 API key from themoviedb.org.',
-                style: TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ctrl,
-                obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'API key',
-                  errorText: error,
-                  prefixIcon: const Icon(Icons.vpn_key_rounded),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final v = ctrl.text.trim();
-                if (v.length < 10) {
-                  setD(() => error = 'That key looks too short.');
-                  return;
-                }
-                Navigator.pop(ctx);
-                widget.onKeyChanged(v);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('API key updated.')),
-                );
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _clearCache() async {
     setState(() => _clearing = true);
     final prefs = await SharedPreferences.getInstance();
@@ -143,12 +56,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             content: Text('Cleared recents and watch progress.')),
       );
     }
-  }
-
-  String get _maskedKey {
-    final k = widget.apiKey;
-    if (k.length <= 8) return '••••';
-    return '${k.substring(0, 4)}••••${k.substring(k.length - 4)}';
   }
 
   @override
@@ -207,39 +114,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          _sectionLabel('ACCOUNT & ACCESS'),
+          _sectionLabel('CATALOG'),
           GlassCard(
             radius: 18,
             padding: EdgeInsets.zero,
             child: Column(
               children: [
                 _row(
-                  icon: Icons.vpn_key_rounded,
+                  icon: Icons.grid_view_rounded,
                   iconBg: AppTheme.info.withOpacity(0.14),
                   iconColor: AppTheme.info,
-                  title: 'TMDB API key',
-                  subtitle: _maskedKey,
-                  trailing: TextButton(
-                    onPressed: _changeKeyDialog,
-                    style: TextButton.styleFrom(
-                      minimumSize: Size.zero,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text('Change'),
-                  ),
+                  title: 'Catalog source',
+                  subtitle: 'Cinemeta • Top Movies & Series included',
+                  trailing: const Icon(Icons.verified_rounded,
+                      color: AppTheme.accent, size: 20),
                 ),
                 const Divider(height: 1, indent: 58),
                 _row(
-                  icon: Icons.logout_rounded,
-                  iconBg: AppTheme.danger.withOpacity(0.12),
-                  iconColor: AppTheme.danger,
-                  title: 'Reset API key',
-                  subtitle: 'Back to the setup screen',
+                  icon: Icons.refresh_rounded,
+                  iconBg: Colors.white.withOpacity(0.07),
+                  iconColor: AppTheme.textDim,
+                  title: 'Reload categories',
+                  subtitle: 'Refresh rows from your plugins',
                   trailing: const Icon(Icons.chevron_right_rounded,
                       color: AppTheme.textDim),
-                  onTap: _confirmResetKey,
+                  onTap: _openPlugins,
                 ),
               ],
             ),
@@ -364,7 +263,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     errorBuilder: (c, e, s) => Container(
                       color: AppTheme.accent,
                       child: const Center(
-                        child: Text('NGX',
+                        child: Text('N',
                             style: TextStyle(
                                 color: AppTheme.onAccent,
                                 fontWeight: FontWeight.w900,
@@ -380,7 +279,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Neeraj {NGX}',
+                    Text('Neeraj',
                         style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
@@ -420,7 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 13),
           const Text(
-            'Designed and crafted with care by Neeraj {NGX} — a fast, cinematic home for your movies, shows and anime.',
+            'Designed and crafted with care by Neeraj — a fast, cinematic home for your movies, shows and anime.',
             style: TextStyle(
                 color: AppTheme.textDim, fontSize: 13.5, height: 1.55),
           ),

@@ -3,9 +3,23 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AddonManager {
   static const _key = 'stremio_addon_manifests';
 
+  /// Built-in catalog plugin (movies, series, search, meta).
+  /// Seeded automatically so the app works with zero setup, no API key.
+  static const defaultCatalogUrl = 'https://v3-cinemeta.strem.io/manifest.json';
+
   static Future<List<String>> getManifestUrls() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getStringList(_key) ?? [];
+  }
+
+  /// Installs the default catalog plugin on first launch only.
+  /// Never overwrites or duplicates the user's own plugin list.
+  static Future<void> ensureSeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_key) ?? [];
+    if (list.isEmpty) {
+      await prefs.setStringList(_key, [defaultCatalogUrl]);
+    }
   }
 
   static Future<void> addManifestUrl(String url) async {

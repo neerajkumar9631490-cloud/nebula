@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_logo.dart';
 import 'services/torrent/torrent_service.dart';
-import 'screens/setup_screen.dart';
+import 'services/stremio/addon_manager.dart';
 import 'screens/home_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/addons_screen.dart';
@@ -25,36 +24,24 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  String? _apiKey;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadKey();
+    _init();
   }
 
-  Future<void> _loadKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    // Small staged delay so the splash feels intentional, not flickery.
-    await Future.delayed(const Duration(milliseconds: 650));
+  /// Seeds the built-in catalog plugin on first launch so categories,
+  /// search and artwork work instantly — no API key, no setup screen.
+  Future<void> _init() async {
+    await Future.wait([
+      AddonManager.ensureSeeded(),
+      // Small staged delay so the splash feels intentional, not flickery.
+      Future.delayed(const Duration(milliseconds: 650)),
+    ]);
     if (!mounted) return;
-    setState(() {
-      _apiKey = prefs.getString('tmdb_api_key');
-      _loading = false;
-    });
-  }
-
-  Future<void> _saveKey(String key) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('tmdb_api_key', key);
-    if (mounted) setState(() => _apiKey = key);
-  }
-
-  Future<void> _resetKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('tmdb_api_key');
-    if (mounted) setState(() => _apiKey = null);
+    setState(() => _loading = false);
   }
 
   @override
@@ -68,14 +55,7 @@ class _MyAppState extends State<MyApp> {
         switchInCurve: AppTheme.curve,
         child: _loading
             ? const _SplashScreen(key: ValueKey('splash'))
-            : _apiKey == null
-                ? SetupScreen(key: const ValueKey('setup'), onKeySaved: _saveKey)
-                : MainShell(
-                    key: const ValueKey('main'),
-                    apiKey: _apiKey!,
-                    onResetKey: _resetKey,
-                    onKeyChanged: _saveKey,
-                  ),
+            : const MainShell(key: ValueKey('main')),
       ),
     );
   }
@@ -158,15 +138,7 @@ class _SplashScreenState extends State<_SplashScreen>
 }
 
 class MainShell extends StatefulWidget {
-  final String apiKey;
-  final VoidCallback onResetKey;
-  final ValueChanged<String> onKeyChanged;
-
-  const MainShell(
-      {super.key,
-      required this.apiKey,
-      required this.onResetKey,
-      required this.onKeyChanged});
+  const MainShell({super.key});
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -185,20 +157,11 @@ class _MainShellState extends State<MainShell> {
         child: IndexedStack(
           key: ValueKey(_tab),
           index: _tab,
-          children: [
-            HomeScreen(
-                key: ValueKey('home-${widget.apiKey}'),
-                apiKey: widget.apiKey,
-                onResetKey: widget.onResetKey),
-            SearchScreen(
-                key: ValueKey('search-${widget.apiKey}'),
-                apiKey: widget.apiKey),
-            const AddonsScreen(),
-            SettingsScreen(
-              apiKey: widget.apiKey,
-              onResetKey: widget.onResetKey,
-              onKeyChanged: widget.onKeyChanged,
-            ),
+          children: const [
+            HomeScreen(),
+            SearchScreen(),
+            AddonsScreen(),
+            SettingsScreen(),
           ],
         ),
       ),

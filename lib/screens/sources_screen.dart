@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../models/stream_result.dart';
-import '../services/tmdb_service.dart';
 import '../services/stremio/addon_manager.dart';
 import '../services/stremio/addon_client.dart';
 import '../theme/app_theme.dart';
@@ -11,14 +10,12 @@ import 'player_screen.dart';
 
 class SourcesScreen extends StatefulWidget {
   final MediaItem item;
-  final String apiKey;
   final int season;
   final int episode;
 
   const SourcesScreen({
     super.key,
     required this.item,
-    required this.apiKey,
     this.season = 1,
     this.episode = 1,
   });
@@ -61,16 +58,18 @@ class _SourcesScreenState extends State<SourcesScreen> {
       _status.clear();
     });
 
-    final tmdb = TMDBService(widget.apiKey);
-    String imdbId = '';
-    try {
-      imdbId = await tmdb.getExternalId(widget.item.mediaType, widget.item.id);
-      if (mounted) {
-        setState(() => _status
-            .add('TMDB resolved ${imdbId.isEmpty ? "no external id" : imdbId}'));
-      }
-    } catch (e) {
-      if (mounted) setState(() => _status.add('TMDB lookup failed'));
+    // Catalog plugins already hand us universal ids (e.g. 'tt1234567'),
+    // so no external lookup is needed.
+    final rawId = widget.item.id;
+    final imdbId = rawId.startsWith('tt') ? rawId : '';
+    final tmdbId =
+        rawId.startsWith('tmdb:') ? rawId.substring('tmdb:'.length) : '';
+    if (mounted) {
+      setState(() => _status.add(imdbId.isNotEmpty
+          ? 'Catalog id = $imdbId'
+          : (tmdbId.isNotEmpty
+              ? 'Catalog id = tmdb:$tmdbId'
+              : 'No external id for this title')));
     }
 
     final urls = await AddonManager.getManifestUrls();
@@ -102,7 +101,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
             addonName: manifest.name,
             mediaType: stremioType,
             imdbId: imdbId,
-            tmdbId: widget.item.id.toString(),
+            tmdbId: tmdbId,
             idPrefixes: manifest.idPrefixes,
             season: _season,
             episode: _episode,

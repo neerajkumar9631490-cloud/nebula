@@ -3,7 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/media_item.dart';
-import '../services/tmdb_service.dart';
+import '../services/stremio/catalog_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/poster_card.dart';
@@ -11,8 +11,7 @@ import '../widgets/section_header.dart';
 import 'detail_screen.dart';
 
 class SearchScreen extends StatefulWidget {
-  final String apiKey;
-  const SearchScreen({super.key, required this.apiKey});
+  const SearchScreen({super.key});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -21,27 +20,26 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final _controller = TextEditingController();
   final _focus = FocusNode();
+  final _catalogs = CatalogService();
   Timer? _debounce;
   List<MediaItem> _results = [];
   List<MediaItem> _hot = [];
   List<String> _recent = [];
   bool _loading = false;
   bool _searched = false;
-  late TMDBService _service;
 
   static const List<String> _suggestions = [
     'Interstellar',
+    'Breaking Bad',
     'Jujutsu Kaisen',
-    'Dhurandhar',
-    'The Runner',
-    'Mushoku Tensei',
-    'Alpha',
+    'Dune',
+    'The Boys',
+    'Avatar',
   ];
 
   @override
   void initState() {
     super.initState();
-    _service = TMDBService(widget.apiKey);
     _loadRecent();
     _loadHot();
   }
@@ -56,7 +54,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _loadRecent() async {
     final prefs = await SharedPreferences.getInstance();
-    if (mounted) setState(() => _recent = prefs.getStringList('recent_searches') ?? []);
+    if (mounted) {
+      setState(() => _recent = prefs.getStringList('recent_searches') ?? []);
+    }
   }
 
   Future<void> _saveRecent(String q) async {
@@ -76,14 +76,20 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _loadHot() async {
     try {
-      final r = await _service.getPopularMovies();
-      if (mounted) setState(() => _hot = r);
+      final sections = await _catalogs.loadSections(catalogsPerType: 1);
+      if (!mounted) return;
+      final movies = sections.where((s) => s.isMovies).toList();
+      final pick = movies.isNotEmpty
+          ? movies.first
+          : (sections.isNotEmpty ? sections.first : null);
+      if (pick != null) setState(() => _hot = pick.items);
     } catch (_) {}
   }
 
   void _onChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 450), () => _search(query, save: false));
+    _debounce = Timer(
+        const Duration(milliseconds: 450), () => _search(query, save: false));
   }
 
   Future<void> _search(String query, {bool save = true}) async {
@@ -101,21 +107,20 @@ class _SearchScreenState extends State<SearchScreen> {
       _searched = true;
     });
     try {
-      final results = await _service.search(q);
+      final results = await _catalogs.searchAll(q);
       if (!mounted) return;
       setState(() {
         _results = results;
         _loading = false;
       });
-      if (save && results.isNotEmpty) _saveRecent(q);
-      if (save && results.isEmpty) _saveRecent(q);
+      if (save) _saveRecent(q);
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _open(MediaItem item) => Navigator.push(context,
-      MaterialPageRoute(builder: (_) => DetailScreen(item: item, apiKey: widget.apiKey)));
+  void _open(MediaItem item) => Navigator.push(
+      context, MaterialPageRoute(builder: (_) => DetailScreen(item: item)));
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +165,9 @@ class _SearchScreenState extends State<SearchScreen> {
                     color: Colors.white.withOpacity(0.07),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                        color: _focus.hasFocus ? AppTheme.accent : AppTheme.stroke),
+                        color: _focus.hasFocus
+                            ? AppTheme.accent
+                            : AppTheme.stroke),
                   ),
                   child: Row(
                     children: [
@@ -176,7 +183,8 @@ class _SearchScreenState extends State<SearchScreen> {
                           onChanged: _onChanged,
                           onSubmitted: (q) => _search(q),
                           onTap: () => setState(() {}),
-                          style: const TextStyle(color: AppTheme.text, fontSize: 15),
+                          style: const TextStyle(
+                              color: AppTheme.text, fontSize: 15),
                           decoration: InputDecoration(
                             hintText: 'Movies, TV shows, anime…',
                             filled: false,
@@ -231,7 +239,8 @@ class _SearchScreenState extends State<SearchScreen> {
     return ListView(
       key: key,
       physics: const BouncingScrollPhysics(),
-      padding: EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
+      padding:
+          EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
       children: [
         if (_recent.isNotEmpty) ...[
           Padding(
@@ -240,11 +249,14 @@ class _SearchScreenState extends State<SearchScreen> {
               children: [
                 const Text('Recent',
                     style: TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.w800, color: AppTheme.text)),
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.text)),
                 const Spacer(),
                 TextButton.icon(
                   onPressed: _clearRecent,
-                  icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                  icon:
+                      const Icon(Icons.delete_outline_rounded, size: 17),
                   label: const Text('Clear'),
                   style: TextButton.styleFrom(
                     foregroundColor: AppTheme.textDim,
@@ -297,7 +309,8 @@ class _SearchScreenState extends State<SearchScreen> {
                             fontWeight: FontWeight.w800,
                             color: AppTheme.text)),
                     Text('Tap to explore instantly',
-                        style: TextStyle(fontSize: 12, color: AppTheme.textFaint)),
+                        style: TextStyle(
+                            fontSize: 12, color: AppTheme.textFaint)),
                   ],
                 ),
               ),
@@ -321,7 +334,7 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
         const SectionHeader(
-            title: 'Hot Movies', subtitle: 'Trending this week worldwide'),
+            title: 'Hot right now', subtitle: 'Top titles from your plugins'),
         if (_hot.isEmpty)
           const PosterRowSkeleton(count: 5)
         else
@@ -337,7 +350,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 width: 138,
                 child: Pressable(
                   onTap: () => _open(_hot[i]),
-                  child: PosterCard(item: _hot[i], apiKey: widget.apiKey, rank: i + 1),
+                  child: PosterCard(item: _hot[i], rank: i + 1),
                 ),
               ),
             ),
@@ -393,11 +406,14 @@ class _SearchScreenState extends State<SearchScreen> {
             const SizedBox(height: 16),
             const Text('No results found',
                 style: TextStyle(
-                    fontSize: 17, fontWeight: FontWeight.w800, color: AppTheme.text)),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.text)),
             const SizedBox(height: 6),
             Text('Try “${_controller.text.trim()}” with different spelling.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppTheme.textDim, fontSize: 13)),
+                style:
+                    const TextStyle(color: AppTheme.textDim, fontSize: 13)),
           ],
         ),
       ),
@@ -437,7 +453,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       borderRadius: BorderRadius.circular(10),
                       child: item.posterPath != null
                           ? CachedNetworkImage(
-                              imageUrl: _service.getImgUrl(item.posterPath),
+                              imageUrl: item.posterPath!,
                               fit: BoxFit.cover,
                               memCacheWidth: 140,
                               fadeInDuration: AppTheme.fast,

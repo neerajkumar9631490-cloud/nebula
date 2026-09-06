@@ -55,12 +55,12 @@ class WatchProgressService {
   factory WatchProgressService() => _instance;
   WatchProgressService._internal();
 
-  static String _keyMovie(int id) => 'wp_movie_$id';
-  static String _keyEpisode(int id, int season, int episode) =>
+  static String _keyMovie(String id) => 'wp_movie_$id';
+  static String _keyEpisode(String id, int season, int episode) =>
       'wp_tv_${id}_s${season}_e$episode';
 
   Future<void> saveMovie({
-    required int id,
+    required String id,
     required int positionMs,
     required int durationMs,
     String? title,
@@ -69,7 +69,7 @@ class WatchProgressService {
   }
 
   Future<void> saveEpisode({
-    required int id,
+    required String id,
     required int season,
     required int episode,
     required int positionMs,
@@ -97,12 +97,12 @@ class WatchProgressService {
     await prefs.setString(key, jsonEncode(data));
   }
 
-  Future<WatchProgress?> loadMovie(int id) async {
+  Future<WatchProgress?> loadMovie(String id) async {
     return _load(_keyMovie(id));
   }
 
   Future<WatchProgress?> loadEpisode(
-      int id, int season, int episode) async {
+      String id, int season, int episode) async {
     return _load(_keyEpisode(id, season, episode));
   }
 
@@ -119,12 +119,12 @@ class WatchProgressService {
     }
   }
 
-  Future<void> clearMovie(int id) async {
+  Future<void> clearMovie(String id) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyMovie(id));
   }
 
-  Future<void> clearEpisode(int id, int season, int episode) async {
+  Future<void> clearEpisode(String id, int season, int episode) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyEpisode(id, season, episode));
   }

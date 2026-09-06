@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
-import '../services/tmdb_service.dart';
+import '../services/stremio/catalog_service.dart';
 import '../services/watch_progress_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
@@ -9,9 +9,8 @@ import 'sources_screen.dart';
 
 class DetailScreen extends StatefulWidget {
   final MediaItem item;
-  final String apiKey;
 
-  const DetailScreen({super.key, required this.item, required this.apiKey});
+  const DetailScreen({super.key, required this.item});
 
   @override
   State<DetailScreen> createState() => _DetailScreenState();
@@ -19,14 +18,18 @@ class DetailScreen extends StatefulWidget {
 
 class _DetailScreenState extends State<DetailScreen> {
   final WatchProgressService _wp = WatchProgressService();
+  final CatalogService _catalogs = CatalogService();
   int _selectedSeason = 1;
   int _selectedEpisode = 1;
   WatchProgress? _movieProgress;
+  Map<String, dynamic>? _meta;
+  Map<int, List<int>> _epsBySeason = {};
 
   @override
   void initState() {
     super.initState();
     _loadProgress();
+    _loadMeta();
   }
 
   Future<void> _loadProgress() async {
@@ -36,13 +39,65 @@ class _DetailScreenState extends State<DetailScreen> {
     }
   }
 
+  /// Full details from a meta plugin: real season/episode lists,
+  /// genres and richer artwork. Falls back gracefully when offline.
+  Future<void> _loadMeta() async {
+    if (widget.item.mediaType != 'tv') return;
+    try {
+      final meta = await _catalogs.fetchMeta(widget.item);
+      if (!mounted) return;
+      final bySeason = <int, List<int>>{};
+      final videos = meta?['videos'];
+      if (videos is List) {
+        for (final v in videos.whereType<Map<String, dynamic>>()) {
+          final s = (v['season'] as num?)?.toInt() ?? 0;
+          final e = (v['episode'] as num?)?.toInt() ??
+              (v['number'] as num?)?.toInt() ??
+              0;
+          if (s > 0 && e > 0) bySeason.putIfAbsent(s, () => <int>[]).add(e);
+        }
+        for (final k in bySeason.keys) {
+          bySeason[k]!.sort();
+        }
+      }
+      setState(() {
+        _meta = meta;
+        _epsBySeason = bySeason;
+        final seasons = _seasonOptions;
+        if (!seasons.contains(_selectedSeason)) {
+          _selectedSeason = seasons.first;
+        }
+        final eps = _episodeOptions;
+        if (!eps.contains(_selectedEpisode)) {
+          _selectedEpisode = eps.first;
+        }
+      });
+    } catch (_) {}
+  }
+
+  List<int> get _seasonOptions {
+    final s = _epsBySeason.keys.toList()..sort();
+    return s.isEmpty ? List.generate(5, (i) => i + 1) : s;
+  }
+
+  List<int> get _episodeOptions {
+    final eps = _epsBySeason[_selectedSeason];
+    if (eps == null || eps.isEmpty) return List.generate(20, (i) => i + 1);
+    return eps;
+  }
+
+  List<String> get _genres {
+    final g = _meta?['genres'];
+    if (g is! List) return const [];
+    return g.whereType<String>().take(4).toList();
+  }
+
   void _openSources() {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => SourcesScreen(
           item: widget.item,
-          apiKey: widget.apiKey,
           season: _selectedSeason,
           episode: _selectedEpisode,
         ),
@@ -75,12 +130,12 @@ class _DetailScreenState extends State<DetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final service = TMDBService(widget.apiKey);
     final isTv = widget.item.mediaType == 'tv';
+    // Artwork URLs come straight from the catalog plugin.
     final hasBackdrop = widget.item.backdropPath != null;
     final backdrop = hasBackdrop
-        ? service.getImgUrl(widget.item.backdropPath)
-        : (widget.item.posterPath != null ? service.getImgUrl(widget.item.posterPath) : null);
+        ? widget.item.backdropPath
+        : widget.item.posterPath;
     // Size the banner to the 16:9 backdrop aspect so a true backdrop
     // fits with zero cropping. Clamped to stay cinematic on tablets
     // and compact on small phones. Portrait posters never stretch as
@@ -224,8 +279,7 @@ class _DetailScreenState extends State<DetailScreen> {
                               borderRadius: BorderRadius.circular(16),
                               child: widget.item.posterPath != null
                                   ? CachedNetworkImage(
-                                      imageUrl:
-                                          service.getImgUrl(widget.item.posterPath),
+                                      imageUrl: widget.item.posterPath!,
                                       // Contain (not cover) so the entire
                                       // poster is always visible regardless
                                       // of source aspect — standard 2:3
@@ -272,6 +326,15 @@ class _DetailScreenState extends State<DetailScreen> {
                                           icon: Icons.star_rounded),
                                   ],
                                 ),
+                                if (_genres.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 7,
+                                    runSpacing: 7,
+                                    children:
+                                        _genres.map((g) => _chip(g)).toList(),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -377,12 +440,17 @@ class _DetailScreenState extends State<DetailScreen> {
                                 color: AppTheme.text, fontWeight: FontWeight.w700),
                             underline: const SizedBox.shrink(),
                             borderRadius: BorderRadius.circular(14),
-                            items: List.generate(5, (i) => i + 1)
+                            items: _seasonOptions
                                 .map((s) => DropdownMenuItem(
                                     value: s, child: Text('$s')))
                                 .toList(),
-                            onChanged: (v) =>
-                                setState(() => _selectedSeason = v ?? 1),
+                            onChanged: (v) => setState(() {
+                              _selectedSeason = v ?? 1;
+                              final eps = _episodeOptions;
+                              _selectedEpisode = eps.contains(_selectedEpisode)
+                                  ? _selectedEpisode
+                                  : eps.first;
+                            }),
                           ),
                           Container(
                               width: 1,
@@ -402,7 +470,7 @@ class _DetailScreenState extends State<DetailScreen> {
                               underline: const SizedBox.shrink(),
                               borderRadius: BorderRadius.circular(14),
                               isExpanded: true,
-                              items: List.generate(20, (i) => i + 1)
+                              items: _episodeOptions
                                   .map((e) => DropdownMenuItem(
                                       value: e, child: Text('Episode $e')))
                                   .toList(),

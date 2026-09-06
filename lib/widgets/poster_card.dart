@@ -1,22 +1,20 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
-import '../services/tmdb_service.dart';
 import '../theme/app_theme.dart';
 import 'badges.dart';
 import 'glass_card.dart';
 
 class PosterCard extends StatelessWidget {
   final MediaItem item;
-  final String apiKey;
   final double? progress;
   final int? rank;
 
-  const PosterCard({super.key, required this.item, required this.apiKey, this.progress, this.rank});
+  const PosterCard({super.key, required this.item, this.progress, this.rank});
 
   @override
   Widget build(BuildContext context) {
-    final imgUrl = TMDBService(apiKey).getImgUrl(item.posterPath);
+    final imgUrl = item.posterPath ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
