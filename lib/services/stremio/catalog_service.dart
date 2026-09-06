@@ -1,4 +1,4 @@
-import '../models/media_item.dart';
+import '../../models/media_item.dart';
 import 'addon_client.dart';
 import 'addon_manager.dart';
 
