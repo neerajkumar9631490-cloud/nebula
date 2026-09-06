@@ -25,9 +25,15 @@ class MediaItem {
   });
 
   /// Parses a Stremio Cinemeta-style meta preview object.
-  /// [stremioType] is the catalog type: 'movie' or 'series'.
+  /// [stremioType] is the catalog type ('movie', 'series', …). The meta's
+  /// own `type` field wins when it names a known video type, so mixed
+  /// catalogs still label every row correctly.
   factory MediaItem.fromCinemeta(Map<String, dynamic> json, String stremioType) {
-    final type = stremioType == 'series' ? 'tv' : 'movie';
+    final declared = json['type']?.toString() ?? '';
+    final effective = declared == 'movie' || declared == 'series'
+        ? declared
+        : stremioType;
+    final type = effective == 'series' ? 'tv' : 'movie';
     final title = json['name']?.toString() ?? 'Unknown';
 
     final release = json['releaseInfo']?.toString() ?? '';

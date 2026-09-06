@@ -50,13 +50,17 @@ class CatalogService {
         baseUrl: addon.baseUrl,
         type: catalog.type,
         catalogId: catalog.id,
+        // Catalogs with required filters (e.g. genre) reject bare
+        // requests — satisfy them with the manifest's first options.
+        extra: catalog.requiredDefaults,
       );
       if (items.isEmpty) return null;
-      final label = catalog.type == 'series' ? 'TV Shows' : 'Movies';
+      final isSeries = catalog.type != 'movie';
+      final label = isSeries ? 'TV Shows' : 'Movies';
       return CatalogSection(
         title: '${catalog.name} $label',
         subtitle: 'From ${addon.manifest.name}',
-        type: catalog.type == 'series' ? 'series' : 'movie',
+        type: isSeries ? 'series' : 'movie',
         items: items,
       );
     } catch (_) {
@@ -65,7 +69,8 @@ class CatalogService {
   }
 
   /// Every category from every catalog plugin, in install order
-  /// (movies before series per plugin).
+  /// (movies, then series, then any other catalog types the
+  /// plugin advertises, e.g. anime).
   Future<List<CatalogSection>> loadSections({int catalogsPerType = 3}) async {
     final addons = await _loadAddons();
     final sections = <CatalogSection>[];
@@ -74,16 +79,20 @@ class CatalogService {
           addon.manifest.catalogs.isEmpty) {
         continue;
       }
-      final movies = addon.manifest.catalogs
-          .where((c) => c.type == 'movie' && c.id.isNotEmpty)
-          .take(catalogsPerType)
+      final usable = addon.manifest.catalogs
+          .where((c) => c.type.isNotEmpty && c.id.isNotEmpty)
           .toList();
-      final series = addon.manifest.catalogs
-          .where((c) => c.type == 'series' && c.id.isNotEmpty)
-          .take(catalogsPerType)
-          .toList();
-      final results = await Future.wait(
-          [for (final c in [...movies, ...series]) _safeSection(addon, c)]);
+      final movies =
+          usable.where((c) => c.type == 'movie').take(catalogsPerType);
+      final series =
+          usable.where((c) => c.type == 'series').take(catalogsPerType);
+      final others = usable
+          .where((c) => c.type != 'movie' && c.type != 'series')
+          .take(catalogsPerType);
+      final results = await Future.wait([
+        for (final c in [...movies, ...series, ...others])
+          _safeSection(addon, c)
+      ]);
       for (final s in results) {
         if (s != null) sections.add(s);
       }
@@ -91,7 +100,8 @@ class CatalogService {
     return sections;
   }
 
-  /// Searches movie + series catalogs across all catalog plugins.
+  /// Searches one catalog per advertised type across all catalog
+  /// plugins (search-capable ones first).
   Future<List<MediaItem>> searchAll(String query, {int limit = 40}) async {
     final q = query.trim();
     if (q.isEmpty) return [];
@@ -99,24 +109,15 @@ class CatalogService {
     final jobs = <Future<List<MediaItem>>>[];
     for (final addon in addons) {
       if (!addon.manifest.supportsCatalog) continue;
-      final movie = _pickCatalog(addon.manifest, 'movie');
-      final series = _pickCatalog(addon.manifest, 'series');
-      if (movie != null) {
+      final picks = _pickSearchCatalogs(addon.manifest);
+      for (final catalog in picks) {
         jobs.add(_client
             .fetchCatalog(
                 baseUrl: addon.baseUrl,
-                type: 'movie',
-                catalogId: movie.id,
-                search: q)
-            .catchError((_) => <MediaItem>[]));
-      }
-      if (series != null) {
-        jobs.add(_client
-            .fetchCatalog(
-                baseUrl: addon.baseUrl,
-                type: 'series',
-                catalogId: series.id,
-                search: q)
+                type: catalog.type,
+                catalogId: catalog.id,
+                search: q,
+                extra: catalog.requiredDefaults)
             .catchError((_) => <MediaItem>[]));
       }
     }
@@ -148,14 +149,28 @@ class CatalogService {
     return null;
   }
 
-  AddonCatalog? _pickCatalog(AddonManifest manifest, String type) {
-    final list =
-        manifest.catalogs.where((c) => c.type == type && c.id.isNotEmpty).toList();
-    if (list.isEmpty) return null;
-    for (final c in list) {
-      if (c.id.toLowerCase().contains('top')) return c;
+  /// One searchable catalog per advertised type: search-capable
+  /// catalogs first, preferring the 'top' catalog. Capped so a wall
+  /// of plugins can't flood the network.
+  List<AddonCatalog> _pickSearchCatalogs(AddonManifest manifest) {
+    final byType = <String, List<AddonCatalog>>{};
+    for (final c in manifest.catalogs) {
+      if (c.type.isEmpty || c.id.isEmpty) continue;
+      (byType[c.type] ??= <AddonCatalog>[]).add(c);
     }
-    return list.first;
+    final picks = <AddonCatalog>[];
+    for (final list in byType.values) {
+      list.sort((a, b) {
+        final aScore = (a.supportsSearch ? 0 : 1) * 10 +
+            (a.id.toLowerCase().contains('top') ? 0 : 1);
+        final bScore = (b.supportsSearch ? 0 : 1) * 10 +
+            (b.id.toLowerCase().contains('top') ? 0 : 1);
+        return aScore.compareTo(bScore);
+      });
+      picks.add(list.first);
+      if (picks.length >= 4) break;
+    }
+    return picks;
   }
 }
 

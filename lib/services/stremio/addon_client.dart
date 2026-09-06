@@ -3,18 +3,73 @@ import 'package:http/http.dart' as http;
 import '../../models/media_item.dart';
 import '../../models/stream_result.dart';
 
+/// An extra filter a catalog accepts, e.g. genre or search.
+/// Manifests declare these as maps ({name, isRequired, options})
+/// or plain strings.
+class AddonCatalogExtra {
+  final String name;
+  final bool isRequired;
+  final List<String> options;
+
+  const AddonCatalogExtra({
+    required this.name,
+    this.isRequired = false,
+    this.options = const [],
+  });
+
+  factory AddonCatalogExtra.fromJson(dynamic json) {
+    if (json is String) return AddonCatalogExtra(name: json);
+    if (json is Map<String, dynamic>) {
+      return AddonCatalogExtra(
+        name: json['name']?.toString() ?? '',
+        isRequired: json['isRequired'] == true,
+        options: (json['options'] as List? ?? [])
+            .map((e) => e.toString())
+            .where((e) => e.isNotEmpty)
+            .toList(),
+      );
+    }
+    return const AddonCatalogExtra(name: '');
+  }
+}
+
 class AddonCatalog {
-  final String type; // Stremio type: 'movie' | 'series' | ...
+  final String type; // Stremio type: 'movie' | 'series' | 'anime' | ...
   final String id; // e.g. 'top'
   final String name; // e.g. 'Top'
+  final List<AddonCatalogExtra> extra;
 
-  const AddonCatalog({required this.type, required this.id, required this.name});
+  const AddonCatalog({
+    required this.type,
+    required this.id,
+    required this.name,
+    this.extra = const [],
+  });
 
   factory AddonCatalog.fromJson(Map<String, dynamic> json) => AddonCatalog(
         type: json['type']?.toString() ?? '',
         id: json['id']?.toString() ?? '',
         name: json['name']?.toString() ?? '',
+        extra: (json['extra'] as List? ?? [])
+            .map(AddonCatalogExtra.fromJson)
+            .where((e) => e.name.isNotEmpty)
+            .toList(),
       );
+
+  /// Defaults satisfying the catalog's *required* extras, so addons that
+  /// reject bare requests (e.g. genre-first catalogs) still return rows.
+  Map<String, String> get requiredDefaults {
+    final out = <String, String>{};
+    for (final e in extra) {
+      if (e.isRequired && e.options.isNotEmpty && e.name != 'search') {
+        out[e.name] = e.options.first;
+      }
+    }
+    return out;
+  }
+
+  bool get supportsSearch =>
+      extra.any((e) => e.name == 'search');
 }
 
 class AddonManifest {
@@ -75,17 +130,26 @@ class AddonClient {
 
   /// Fetches a catalog page: `$baseUrl/catalog/<type>/<id>.json`.
   /// With [search], queries `$baseUrl/catalog/<type>/<id>/search=<q>.json`
-  /// (supported by catalog plugins such as Cinemeta).
+  /// (supported by catalog plugins such as Cinemeta). [extra] carries
+  /// additional filters as `/<k>=<v>&…` (e.g. required genre defaults).
   Future<List<MediaItem>> fetchCatalog({
     required String baseUrl,
     required String type,
     required String catalogId,
     String? search,
+    Map<String, String> extra = const {},
   }) async {
-    var path = '/catalog/$type/$catalogId.json';
+    final params = <String, String>{...extra};
     if (search != null && search.trim().isNotEmpty) {
-      path =
-          '/catalog/$type/$catalogId/search=${Uri.encodeComponent(search.trim())}.json';
+      params['search'] = search.trim();
+    }
+    var path = '/catalog/$type/$catalogId.json';
+    if (params.isNotEmpty) {
+      final seg = params.entries
+          .map((e) =>
+              '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+          .join('&');
+      path = '/catalog/$type/$catalogId/$seg.json';
     }
     final res = await http
         .get(Uri.parse('$baseUrl$path'))
