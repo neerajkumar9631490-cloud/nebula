@@ -6,6 +6,7 @@ import 'services/torrent/torrent_service.dart';
 import 'services/stremio/addon_manager.dart';
 import 'screens/home_screen.dart';
 import 'screens/search_screen.dart';
+import 'screens/library_screen.dart';
 import 'screens/addons_screen.dart';
 import 'screens/settings_screen.dart';
 
@@ -157,11 +158,12 @@ class _MainShellState extends State<MainShell> {
         child: IndexedStack(
           key: ValueKey(_tab),
           index: _tab,
-          children: const [
-            HomeScreen(),
-            SearchScreen(),
-            AddonsScreen(),
-            SettingsScreen(),
+          children: [
+            HomeScreen(onSearchTap: () => setState(() => _tab = 1)),
+            const SearchScreen(),
+            const LibraryScreen(),
+            const AddonsScreen(),
+            const SettingsScreen(),
           ],
         ),
       ),
@@ -180,14 +182,19 @@ class _MainShellState extends State<MainShell> {
               label: 'Home',
             ),
             NavigationDestination(
-              icon: Icon(Icons.search_outlined),
-              selectedIcon: Icon(Icons.search_rounded),
-              label: 'Search',
+              icon: Icon(Icons.explore_outlined),
+              selectedIcon: Icon(Icons.explore_rounded),
+              label: 'Discover',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.video_library_outlined),
+              selectedIcon: Icon(Icons.video_library_rounded),
+              label: 'Library',
             ),
             NavigationDestination(
               icon: Icon(Icons.extension_outlined),
               selectedIcon: Icon(Icons.extension_rounded),
-              label: 'Add-ons',
+              label: 'Addons',
             ),
             NavigationDestination(
               icon: Icon(Icons.settings_outlined),

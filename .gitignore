@@ -1,0 +1,22 @@
+# Reference / design material — never commit
+new_ui_style.jpg
+new_ui_style.png
+
+# Flutter / Dart build output
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+pubspec.lock
+
+# Android / Gradle
+android/.gradle/
+android/local.properties
+*.iml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store

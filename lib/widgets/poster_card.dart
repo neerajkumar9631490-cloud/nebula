@@ -167,3 +167,99 @@ class PosterRowSkeleton extends StatelessWidget {
     );
   }
 }
+
+/// Edge-to-edge poster tile with big rounded corners and no text —
+/// the reference home-row look. Optional [progress] draws the thin
+/// Continue-Watching bar along the bottom edge.
+class PosterTile extends StatelessWidget {
+  final MediaItem item;
+  final double width;
+  final double radius;
+  final double? progress;
+
+  const PosterTile({
+    super.key,
+    required this.item,
+    this.width = 138,
+    this.radius = 22,
+    this.progress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: AspectRatio(
+        aspectRatio: 2 / 3,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(radius),
+            boxShadow: AppTheme.cardShadow,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(radius),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (item.posterPath != null)
+                  CachedNetworkImage(
+                    imageUrl: item.posterPath!,
+                    fit: BoxFit.cover,
+                    memCacheWidth: 320,
+                    fadeInDuration: AppTheme.fast,
+                    fadeOutDuration: AppTheme.fast,
+                    placeholder: (c, u) => Container(color: AppTheme.surface),
+                    errorWidget: (c, u, e) => Container(
+                      color: AppTheme.surface,
+                      child: const Center(
+                          child: Icon(Icons.movie_outlined,
+                              size: 40, color: AppTheme.textFaint)),
+                    ),
+                  )
+                else
+                  Container(
+                    color: AppTheme.surface,
+                    child: const Center(
+                        child: Icon(Icons.movie_outlined,
+                            size: 40, color: AppTheme.textFaint)),
+                  ),
+                if (progress != null)
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 10,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                              color: Colors.white, shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 4,
+                              backgroundColor:
+                                  Colors.white.withOpacity(0.28),
+                              valueColor:
+                                  const AlwaysStoppedAnimation<Color>(
+                                      Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

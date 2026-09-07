@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../services/stremio/catalog_service.dart';
@@ -7,14 +5,17 @@ import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/poster_card.dart';
-import '../widgets/section_header.dart';
 import 'addons_screen.dart';
 import 'detail_screen.dart';
+import 'see_all_screen.dart';
 
-/// Home lists movie & series categories provided by the installed
-/// catalog plugins — no API key needed.
+/// Reference-style home: logo + search pill on top, then bold
+/// title rows with SEE ALL and edge-to-edge poster tiles.
+/// Categories come from the installed catalog plugins.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final VoidCallback? onSearchTap;
+
+  const HomeScreen({super.key, this.onSearchTap});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -24,45 +25,25 @@ class _HomeScreenState extends State<HomeScreen> {
   final CatalogService _catalogs = CatalogService();
   late Future<List<CatalogSection>> _future;
 
-  final PageController _heroCtrl = PageController(viewportFraction: 1.0);
-  int _heroIndex = 0;
-  Timer? _heroTimer;
-
   @override
   void initState() {
     super.initState();
     _future = _catalogs.loadSections();
   }
 
-  @override
-  void dispose() {
-    _heroTimer?.cancel();
-    _heroCtrl.dispose();
-    super.dispose();
-  }
-
-  void _refresh() {
-    _heroTimer?.cancel();
-    setState(() {
-      _heroIndex = 0;
-      _future = _catalogs.loadSections();
-    });
-  }
-
-  void _startHeroAutoplay(int count) {
-    _heroTimer?.cancel();
-    if (count <= 1) return;
-    _heroTimer = Timer.periodic(const Duration(seconds: 6), (_) {
-      if (!_heroCtrl.hasClients || !mounted) return;
-      final next = (_heroIndex + 1) % count;
-      _heroCtrl.animateToPage(next,
-          duration: const Duration(milliseconds: 650), curve: AppTheme.curve);
-    });
-  }
+  void _refresh() => setState(() => _future = _catalogs.loadSections());
 
   void _open(MediaItem item) => Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => DetailScreen(item: item)),
+      );
+
+  void _seeAll(CatalogSection section) => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              SeeAllScreen(title: section.title, items: section.items),
+        ),
       );
 
   Future<void> _openPlugins() async {
@@ -73,243 +54,90 @@ class _HomeScreenState extends State<HomeScreen> {
     _refresh();
   }
 
-  // ── Hero carousel ──────────────────────────────────────────
-  Widget _heroCarousel(List<MediaItem> items, String label) {
-    final heroes = items.take(6).toList();
-    if (heroes.isEmpty) return const SizedBox.shrink();
-    _startHeroAutoplay(heroes.length);
-    return RepaintBoundary(
-      child: SizedBox(
-        height: 470,
-        child: Stack(
-          children: [
-            PageView.builder(
-              controller: _heroCtrl,
-              physics: const BouncingScrollPhysics(),
-              allowImplicitScrolling: true,
-              onPageChanged: (i) => setState(() => _heroIndex = i),
-              itemCount: heroes.length,
-              itemBuilder: (c, i) =>
-                  _heroSlide(heroes[i], i == _heroIndex, label),
-            ),
-            // Bottom fade is baked into each slide via heroScrim; indicators float above.
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 10,
-              child: Row(
-                children: [
-                  ...List.generate(
-                    heroes.length,
-                    (i) => AnimatedContainer(
-                      duration: AppTheme.med,
-                      curve: AppTheme.curve,
-                      margin: const EdgeInsets.only(right: 6),
-                      width: i == _heroIndex ? 26 : 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(6),
-                        color: i == _heroIndex
-                            ? AppTheme.accent
-                            : Colors.white.withOpacity(0.28),
-                      ),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          _topBar(),
+          Expanded(
+            child: FutureBuilder<List<CatalogSection>>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return _loadingBody();
+                }
+                if (snapshot.hasError) {
+                  return _errorState('Home could not load');
+                }
+                final sections = snapshot.data ?? [];
+                if (sections.isEmpty) {
+                  return _emptyState();
+                }
+                return RefreshIndicator(
+                  color: AppTheme.accent,
+                  backgroundColor: AppTheme.surface,
+                  onRefresh: () async => _refresh(),
+                  child: ListView.builder(
+                    physics: const BouncingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics()),
+                    padding: EdgeInsets.only(
+                        bottom:
+                            110 + MediaQuery.of(context).padding.bottom),
+                    itemCount: sections.length,
+                    itemBuilder: (c, i) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _sectionHead(sections[i]),
+                        _posterRow(sections[i].items),
+                      ],
                     ),
                   ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withOpacity(0.14)),
-                    ),
-                    child: Text('${_heroIndex + 1} / ${heroes.length}',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700)),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _heroSlide(MediaItem item, bool active, String label) {
-    final backdrop = item.backdropPath;
-    return GestureDetector(
-      onTap: () => _open(item),
-      child: AnimatedScale(
-        scale: active ? 1.0 : 0.97,
-        duration: AppTheme.slow,
-        curve: AppTheme.curve,
-        child: Stack(
-          fit: StackFit.expand,
+  Widget _topBar() {
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+        child: Row(
           children: [
-            if (backdrop != null)
-              CachedNetworkImage(
-                imageUrl: backdrop,
-                fit: BoxFit.cover,
-                memCacheWidth: 1000,
-                filterQuality: FilterQuality.high,
-                fadeInDuration: AppTheme.med,
-                placeholder: (c, u) => Container(color: AppTheme.bgHi),
-                errorWidget: (c, u, e) => Container(
-                  color: AppTheme.bgHi,
-                  child: const Center(
-                      child: Icon(Icons.movie_outlined,
-                          size: 56, color: AppTheme.textFaint)),
-                ),
-              )
-            else
-              Container(color: AppTheme.bgHi),
-            const DecoratedBox(decoration: BoxDecoration(gradient: AppTheme.heroScrim)),
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 44,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppTheme.accent.withOpacity(0.16),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppTheme.accent.withOpacity(0.4)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.local_fire_department_rounded,
-                            size: 13, color: AppTheme.accentHi),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            '#${_heroIndex + 1} ${label.toUpperCase()} • ${item.mediaType.toUpperCase()}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                color: AppTheme.accentHi,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.8),
-                          ),
-                        ),
-                      ],
-                    ),
+            const AppLogo(size: 52, radius: 16),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Pressable(
+                onTap: widget.onSearchTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 15),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1D1D26),
+                    borderRadius: BorderRadius.circular(28),
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    item.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        height: 1.1,
-                        letterSpacing: -0.4),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
+                  child: const Row(
                     children: [
-                      if (item.rating > 0) ...[
-                        const Icon(Icons.star_rounded, size: 16, color: AppTheme.star),
-                        const SizedBox(width: 4),
-                        Text(item.rating.toStringAsFixed(1),
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13.5)),
-                        const SizedBox(width: 8),
-                        const Text('•', style: TextStyle(color: Colors.white54)),
-                        const SizedBox(width: 8),
-                      ],
-                      Flexible(
+                      Expanded(
                         child: Text(
-                          item.releaseYear.isEmpty
-                              ? item.mediaType.toUpperCase()
-                              : '${item.releaseYear}  •  ${item.mediaType.toUpperCase()}',
+                          'You can search anything...',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white70,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12.5),
+                          style: TextStyle(
+                              color: AppTheme.textDim, fontSize: 15),
                         ),
                       ),
+                      SizedBox(width: 8),
+                      Icon(Icons.search_rounded,
+                          color: AppTheme.textDim, size: 24),
                     ],
                   ),
-                  if (item.overview.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      item.overview,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white60, fontSize: 13, height: 1.45),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Pressable(
-                        onTap: () => _open(item),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
-                          decoration: BoxDecoration(
-                            gradient: AppTheme.accentGradient,
-                            borderRadius: BorderRadius.circular(14),
-                            boxShadow: AppTheme.glowShadow,
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.play_arrow_rounded,
-                                  color: AppTheme.onAccent, size: 20),
-                              SizedBox(width: 6),
-                              Text('Watch Now',
-                                  style: TextStyle(
-                                      color: AppTheme.onAccent,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 14.5)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Pressable(
-                        onTap: () => _open(item),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: Colors.white.withOpacity(0.22)),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.info_outline_rounded,
-                                  color: Colors.white, size: 18),
-                              SizedBox(width: 6),
-                              Text('Details',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ),
           ],
@@ -318,16 +146,58 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _posterRow(List<MediaItem> items, {bool ranked = false}) {
+  Widget _sectionHead(CatalogSection s) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 22, 8, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(s.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.text,
+                    letterSpacing: -0.2)),
+          ),
+          TextButton(
+            onPressed: () => _seeAll(s),
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.textDim,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('SEE ALL',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4)),
+                SizedBox(width: 2),
+                Icon(Icons.chevron_right_rounded, size: 22),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _posterRow(List<MediaItem> items) {
     return RepaintBoundary(
       child: SizedBox(
-        height: 252,
+        height: 207,
         child: ListView.separated(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),
           itemCount: items.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 13),
+          separatorBuilder: (_, __) => const SizedBox(width: 14),
           itemBuilder: (c, i) => TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: 1),
             duration: Duration(milliseconds: 260 + (i % 8) * 40),
@@ -339,15 +209,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: child,
               ),
             ),
-            child: SizedBox(
-              width: 134,
-              child: Pressable(
-                onTap: () => _open(items[i]),
-                child: PosterCard(
-                  item: items[i],
-                  rank: ranked ? i + 1 : null,
-                ),
-              ),
+            child: Pressable(
+              onTap: () => _open(items[i]),
+              child: PosterTile(item: items[i]),
             ),
           ),
         ),
@@ -355,170 +219,95 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: FutureBuilder<List<CatalogSection>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return CustomScrollView(
+  Widget _loadingBody() {
+    return ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.only(
+          bottom: 110 + MediaQuery.of(context).padding.bottom),
+      children: [
+        for (var s = 0; s < 3; s++) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 22, 20, 12),
+            child: ShimmerBox(width: 220, height: 22, radius: 8),
+          ),
+          SizedBox(
+            height: 207,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              scrollDirection: Axis.horizontal,
               physics: const NeverScrollableScrollPhysics(),
-              slivers: [
-                const SliverAppBar(
-                  floating: true,
-                  title: Text('MOVIX',
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 5)),
+              itemCount: 5,
+              separatorBuilder: (_, __) => const SizedBox(width: 14),
+              itemBuilder: (c, i) =>
+                  const ShimmerBox(width: 138, height: 207, radius: 22),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _emptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.stroke),
+              ),
+              child: const Icon(Icons.extension_off_rounded,
+                  size: 40, color: AppTheme.textDim),
+            ),
+            const SizedBox(height: 16),
+            const Text('No categories yet',
+                style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.text)),
+            const SizedBox(height: 6),
+            const Text(
+                'Install a catalog plugin to browse movies and series.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppTheme.textDim, fontSize: 13.5)),
+            const SizedBox(height: 20),
+            Pressable(
+              onTap: _openPlugins,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24, vertical: 14),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.accentGradient,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: AppTheme.glowShadow,
                 ),
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const ShimmerBox(width: double.infinity, height: 430, radius: 0),
-                      const SectionHeader(title: 'Loading your cinema'),
-                      const PosterRowSkeleton(),
-                      const SizedBox(height: 8),
-                      const PosterRowSkeleton(count: 4),
-                      SizedBox(height: 90 + MediaQuery.of(context).padding.bottom),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          }
-          if (snapshot.hasError) {
-            return _errorState('Home could not load');
-          }
-          final sections = snapshot.data ?? [];
-          if (sections.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Column(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surface,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.stroke),
-                      ),
-                      child: const Icon(Icons.extension_off_rounded,
-                          size: 40, color: AppTheme.textDim),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('No categories yet',
+                    Icon(Icons.extension_rounded,
+                        color: AppTheme.onAccent, size: 19),
+                    SizedBox(width: 8),
+                    Text('Browse plugins',
                         style: TextStyle(
-                            fontSize: 17,
+                            color: AppTheme.onAccent,
                             fontWeight: FontWeight.w800,
-                            color: AppTheme.text)),
-                    const SizedBox(height: 6),
-                    const Text(
-                        'Install a catalog plugin to browse movies and series.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: AppTheme.textDim, fontSize: 13)),
-                    const SizedBox(height: 18),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        FilledButton.icon(
-                            onPressed: _openPlugins,
-                            icon: const Icon(Icons.extension_rounded),
-                            label: const Text('Browse plugins')),
-                        const SizedBox(width: 10),
-                        OutlinedButton.icon(
-                            onPressed: _refresh,
-                            icon: const Icon(Icons.refresh_rounded),
-                            label: const Text('Retry')),
-                      ],
-                    ),
+                            fontSize: 14.5)),
                   ],
                 ),
               ),
-            );
-          }
-          final heroSection = sections.firstWhere(
-            (s) => s.isMovies,
-            orElse: () => sections.first,
-          );
-          return RefreshIndicator(
-            color: AppTheme.accent,
-            backgroundColor: AppTheme.surface,
-            onRefresh: () async => _refresh(),
-            child: CustomScrollView(
-              physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics()),
-              slivers: [
-                SliverAppBar(
-                  floating: true,
-                  snap: true,
-                  backgroundColor: AppTheme.bg.withOpacity(0.85),
-                  title: const Row(
-                    children: [
-                      AppLogo(size: 32, radius: 9, glow: false),
-                      SizedBox(width: 10),
-                      Text('MOVIX',
-                          style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 5)),
-                    ],
-                  ),
-                  actions: [
-                    Container(
-                      margin: const EdgeInsets.only(right: 16),
-                      child: Pressable(
-                        onTap: _openPlugins,
-                        child: Container(
-                          padding: const EdgeInsets.all(9),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.stroke),
-                          ),
-                          child: const Icon(Icons.extension_outlined,
-                              size: 19, color: AppTheme.text),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SliverToBoxAdapter(
-                    child:
-                        _heroCarousel(heroSection.items, heroSection.title)),
-                for (var i = 0; i < sections.length; i++)
-                  SliverToBoxAdapter(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SectionHeader(
-                          title: sections[i].title,
-                          subtitle: sections[i].subtitle,
-                        ),
-                        const SizedBox(height: 2),
-                        AnimatedSwitcher(
-                          duration: AppTheme.med,
-                          switchInCurve: AppTheme.curve,
-                          child: KeyedSubtree(
-                            key: ValueKey(
-                                'row-$i-${sections[i].items.length}'),
-                            child: _posterRow(sections[i].items,
-                                ranked: i == 0),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                      height: 100 + MediaQuery.of(context).padding.bottom),
-                ),
-              ],
             ),
-          );
-        },
+            const SizedBox(height: 10),
+            TextButton.icon(
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry')),
+          ],
+        ),
       ),
     );
   }

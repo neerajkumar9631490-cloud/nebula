@@ -50,6 +50,28 @@ class WatchProgress {
       );
 }
 
+/// One resumable title, reconstructed from its storage key.
+class ContinueEntry {
+  final String storageKey;
+  final String id;
+  final String mediaType; // 'movie' | 'tv'
+  final int season;
+  final int episode;
+  final WatchProgress progress;
+
+  const ContinueEntry({
+    required this.storageKey,
+    required this.id,
+    required this.mediaType,
+    required this.season,
+    required this.episode,
+    required this.progress,
+  });
+
+  String get title => progress.title ?? id;
+  bool get isTv => mediaType == 'tv';
+}
+
 class WatchProgressService {
   static final WatchProgressService _instance = WatchProgressService._internal();
   factory WatchProgressService() => _instance;
@@ -127,5 +149,53 @@ class WatchProgressService {
   Future<void> clearEpisode(String id, int season, int episode) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyEpisode(id, season, episode));
+  }
+
+  /// Every saved title, newest first — powers the Library tab.
+  Future<List<ContinueEntry>> listAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    final out = <ContinueEntry>[];
+    final movieRe = RegExp(r'^wp_movie_(.+)$');
+    final tvRe = RegExp(r'^wp_tv_(.+)_s(\d+)_e(\d+)$');
+    for (final key in prefs.getKeys()) {
+      try {
+        final raw = prefs.getString(key);
+        if (raw == null) continue;
+        final progress = WatchProgress.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>,
+        );
+        final tv = tvRe.firstMatch(key);
+        if (tv != null) {
+          out.add(ContinueEntry(
+            storageKey: key,
+            id: tv.group(1)!,
+            mediaType: 'tv',
+            season: int.parse(tv.group(2)!),
+            episode: int.parse(tv.group(3)!),
+            progress: progress,
+          ));
+          continue;
+        }
+        final movie = movieRe.firstMatch(key);
+        if (movie != null) {
+          out.add(ContinueEntry(
+            storageKey: key,
+            id: movie.group(1)!,
+            mediaType: 'movie',
+            season: 1,
+            episode: 1,
+            progress: progress,
+          ));
+        }
+      } catch (_) {}
+    }
+    out.sort((a, b) =>
+        b.progress.timestampMs.compareTo(a.progress.timestampMs));
+    return out;
+  }
+
+  Future<void> clearEntry(ContinueEntry entry) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(entry.storageKey);
   }
 }

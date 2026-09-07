@@ -8,9 +8,9 @@ class AppTheme {
   AppTheme._();
 
   // ── Palette ──────────────────────────────────────────────
-  static const Color bg = Color(0xFF070B12);
-  static const Color bgHi = Color(0xFF0C1220);
-  static const Color surface = Color(0xFF101827);
+  static const Color bg = Color(0xFF0A0A10);
+  static const Color bgHi = Color(0xFF131318);
+  static const Color surface = Color(0xFF17171E);
   static const Color card = Color(0x14FFFFFF);
   static const Color cardHi = Color(0x22FFFFFF);
   static const Color stroke = Color(0x24FFFFFF);
@@ -52,9 +52,9 @@ class AppTheme {
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
     colors: [
-      Color(0x0D070B12),
-      Color(0x99070B12),
-      Color(0xFF070B12),
+      Color(0x0D0A0A10),
+      Color(0x990A0A10),
+      Color(0xFF0A0A10),
     ],
     stops: [0.0, 0.55, 1.0],
   );
@@ -133,7 +133,7 @@ class AppTheme {
         iconTheme: IconThemeData(color: text),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: const Color(0xF00C1220),
+        backgroundColor: const Color(0xF0111117),
         indicatorColor: accent.withOpacity(0.18),
         labelTextStyle: WidgetStateProperty.all(
           const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
@@ -148,7 +148,7 @@ class AppTheme {
         elevation: 0,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: Color(0xF00C1220),
+        backgroundColor: Color(0xF0111117),
         selectedItemColor: accent,
         unselectedItemColor: textDim,
         type: BottomNavigationBarType.fixed,
