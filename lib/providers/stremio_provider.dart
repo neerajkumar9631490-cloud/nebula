@@ -57,9 +57,36 @@ class StremioStreamProvider implements StreamProvider {
       notices.addAll(r.notices);
       streams.addAll(r.streams);
     }
-    // Best quality first for a premium feel.
-    streams.sort((a, b) => b.label.compareTo(a.label));
+    // Healthiest torrents first (by advertised seeders), everything
+    // else keeps the legacy label order — so the BEST badges land on
+    // the fastest sources instead of arbitrary ones.
+    streams.sort(_compareStreams);
     return ProviderResult(streams: streams, notices: notices);
+  }
+
+  /// Seeders advertised in a source label ('👤 42', '12 seeders',
+  /// 'S: 8', '[5 seed]'). Returns -1 when the label says nothing.
+  static int parseSeeders(String label) {
+    const patterns = [
+      '👤\\s*(\\d+)',
+      '(\\d+)\\s*seeders?',
+      '\\bS\\s*:\\s*(\\d+)',
+      '\\[(\\d+)\\s*[Ss]eed',
+    ];
+    for (final p in patterns) {
+      final m = RegExp(p, caseSensitive: false).firstMatch(label);
+      if (m != null) return int.tryParse(m.group(1)!) ?? -1;
+    }
+    return -1;
+  }
+
+  static int _compareStreams(StreamResult a, StreamResult b) {
+    if (a.kind == StreamKind.torrent && b.kind == StreamKind.torrent) {
+      final bySeeds =
+          parseSeeders(b.label).compareTo(parseSeeders(a.label));
+      if (bySeeds != 0) return bySeeds;
+    }
+    return b.label.compareTo(a.label);
   }
 
   Future<ProviderResult> _queryOne({

@@ -19,7 +19,14 @@ class TorrServerBackend implements TorrentEngine, LocalHttpServer {
   final TorrentService _svc = TorrentService();
 
   @override
-  Future<bool> ensureReady() => _svc.initialize();
+  Future<bool> ensureReady() async {
+    if (!await _svc.initialize()) return false;
+    // Best-effort throughput tuning; streaming works without it.
+    try {
+      await _svc.applyPerformanceProfile();
+    } catch (_) {}
+    return true;
+  }
 
   @override
   Future<bool> ensureRunning() => _svc.initialize();
