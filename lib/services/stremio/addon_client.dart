@@ -206,6 +206,12 @@ class AddonClient {
     required List<String> idPrefixes,
     int season = 1,
     int episode = 1,
+
+    /// Raw catalog id (e.g. 'kitsu:123', 'anilist:456'). Used ONLY when
+    /// neither tt nor tmdb matches, so titles without those ids are
+    /// still attempted instead of silently skipped — addons that can't
+    /// serve the id answer 404 and are skipped gracefully below.
+    String fallbackId = '',
   }) async {
     String? id;
     if (idPrefixes.contains('tt') && imdbId.isNotEmpty) {
@@ -214,6 +220,8 @@ class AddonClient {
       id = tmdbId;
     } else if (idPrefixes.isEmpty && imdbId.isNotEmpty) {
       id = imdbId;
+    } else if (fallbackId.isNotEmpty) {
+      id = fallbackId;
     }
     if (id == null) return [];
 

@@ -30,7 +30,7 @@ class StremioStreamProvider implements StreamProvider {
       else if (tmdbId.isNotEmpty)
         'Catalog id = tmdb:$tmdbId'
       else
-        'No external id for this title',
+        'Catalog id = $rawId (direct)',
     ];
     final streams = <StreamResult>[];
 
@@ -48,6 +48,7 @@ class StremioStreamProvider implements StreamProvider {
         stremioType: stremioType,
         imdbId: imdbId,
         tmdbId: tmdbId,
+        fallbackId: rawId,
         season: query.season,
         episode: query.episode,
       ));
@@ -66,6 +67,7 @@ class StremioStreamProvider implements StreamProvider {
     required String stremioType,
     required String imdbId,
     required String tmdbId,
+    required String fallbackId,
     required int season,
     required int episode,
   }) async {
@@ -90,6 +92,7 @@ class StremioStreamProvider implements StreamProvider {
         idPrefixes: manifest.idPrefixes,
         season: season,
         episode: episode,
+        fallbackId: fallbackId,
       );
       return ProviderResult(
           streams: streams, notices: ['${manifest.name}: ${streams.length} found']);

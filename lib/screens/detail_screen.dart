@@ -140,6 +140,11 @@ class _DetailScreenState extends State<DetailScreen> {
     // fits with zero cropping. Clamped to stay cinematic on tablets
     // and compact on small phones. Portrait posters never stretch as
     // a banner — they render fully-visible (contain) below instead.
+    // The status-bar height is part of the height (not an overlay on
+    // the artwork): with the image inset below it, the visible artwork
+    // below the status icons is exactly bannerH, so nothing at the top
+    // can ever hide under clock/signal icons on any device.
+    final double statusH = MediaQuery.of(context).padding.top;
     final double bannerH =
         (MediaQuery.of(context).size.width * 9 / 16).clamp(230.0, 320.0).toDouble();
 
@@ -148,7 +153,7 @@ class _DetailScreenState extends State<DetailScreen> {
         physics: const BouncingScrollPhysics(),
         slivers: [
           SliverAppBar(
-            expandedHeight: bannerH,
+            expandedHeight: bannerH + statusH,
             pinned: true,
             stretch: true,
             backgroundColor: AppTheme.bg,
@@ -179,8 +184,7 @@ class _DetailScreenState extends State<DetailScreen> {
                     // background bleeds edge-to-edge, so without this the
                     // top of the artwork hides under clock/signal icons.
                     Padding(
-                      padding: EdgeInsets.only(
-                          top: MediaQuery.of(context).padding.top),
+                      padding: EdgeInsets.only(top: statusH),
                       child: CachedNetworkImage(
                         imageUrl: backdrop,
                         // Banner is 16:9 like the image, so cover fits
