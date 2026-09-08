@@ -68,7 +68,9 @@ class TorrentService {
     if (_profileApplied) return true;
     try {
       if (!await initialize()) return false;
-      var base = _controller.baseUrl;
+      final baseUri = _controller.baseUrl;
+      if (baseUri == null) return false;
+      var base = baseUri.toString();
       if (base.endsWith('/')) base = base.substring(0, base.length - 1);
       final uri = Uri.parse('$base/api/settings');
 
