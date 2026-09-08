@@ -175,17 +175,24 @@ class _DetailScreenState extends State<DetailScreen> {
                 fit: StackFit.expand,
                 children: [
                   if (hasBackdrop && backdrop != null)
-                    CachedNetworkImage(
-                      imageUrl: backdrop,
-                      // Banner is 16:9 like the image, so cover fits
-                      // without cutting; topCenter keeps faces/logos
-                      // safe if a backdrop ever differs in aspect.
-                      fit: BoxFit.cover,
-                      alignment: Alignment.topCenter,
-                      memCacheWidth: 1000,
-                      fadeInDuration: AppTheme.med,
-                      placeholder: (c, u) => Container(color: AppTheme.bgHi),
-                      errorWidget: (c, u, e) => Container(color: AppTheme.bgHi),
+                    // Inset below the system status bar: the flexible-space
+                    // background bleeds edge-to-edge, so without this the
+                    // top of the artwork hides under clock/signal icons.
+                    Padding(
+                      padding: EdgeInsets.only(
+                          top: MediaQuery.of(context).padding.top),
+                      child: CachedNetworkImage(
+                        imageUrl: backdrop,
+                        // Banner is 16:9 like the image, so cover fits
+                        // without cutting; topCenter keeps faces/logos
+                        // safe if a backdrop ever differs in aspect.
+                        fit: BoxFit.cover,
+                        alignment: Alignment.topCenter,
+                        memCacheWidth: 1000,
+                        fadeInDuration: AppTheme.med,
+                        placeholder: (c, u) => Container(color: AppTheme.bgHi),
+                        errorWidget: (c, u, e) => Container(color: AppTheme.bgHi),
+                      ),
                     )
                   else if (backdrop != null)
                     Container(
