@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../models/stream_result.dart';
-import '../services/stremio/addon_manager.dart';
-import '../services/stremio/addon_client.dart';
+import '../core/providers/stream_provider.dart';
+import '../providers/stremio_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import 'addons_screen.dart';
@@ -25,7 +25,9 @@ class SourcesScreen extends StatefulWidget {
 }
 
 class _SourcesScreenState extends State<SourcesScreen> {
-  final AddonClient _client = AddonClient();
+  // Provider abstraction only — all Stremio-protocol details live in
+  // StremioStreamProvider. The UI renders streams + status notices.
+  final StreamProvider _provider = StremioStreamProvider();
   final List<StreamResult> _results = [];
   final List<String> _status = [];
   bool _loading = true;
@@ -58,70 +60,18 @@ class _SourcesScreenState extends State<SourcesScreen> {
       _status.clear();
     });
 
-    // Catalog plugins already hand us universal ids (e.g. 'tt1234567'),
-    // so no external lookup is needed.
-    final rawId = widget.item.id;
-    final imdbId = rawId.startsWith('tt') ? rawId : '';
-    final tmdbId =
-        rawId.startsWith('tmdb:') ? rawId.substring('tmdb:'.length) : '';
-    if (mounted) {
-      setState(() => _status.add(imdbId.isNotEmpty
-          ? 'Catalog id = $imdbId'
-          : (tmdbId.isNotEmpty
-              ? 'Catalog id = tmdb:$tmdbId'
-              : 'No external id for this title')));
-    }
-
-    final urls = await AddonManager.getManifestUrls();
-    if (urls.isEmpty && mounted) {
-      setState(() => _status.add('No add-ons installed yet.'));
-    }
-
-    final futures = <Future<void>>[];
-    for (final url in urls) {
-      futures.add(Future(() async {
-        final base = AddonManager.baseUrlFromManifestUrl(url);
-        try {
-          final manifest = await _client.fetchManifest(url);
-          if (!manifest.supportsStream) {
-            if (mounted) {
-              setState(() => _status.add('${manifest.name}: no stream resource'));
-            }
-            return;
-          }
-          final stremioType = _isTv ? 'series' : 'movie';
-          if (manifest.types.isNotEmpty && !manifest.types.contains(stremioType)) {
-            if (mounted) {
-              setState(() => _status.add('${manifest.name}: skips $stremioType'));
-            }
-            return;
-          }
-          final streams = await _client.queryStreams(
-            baseUrl: base,
-            addonName: manifest.name,
-            mediaType: stremioType,
-            imdbId: imdbId,
-            tmdbId: tmdbId,
-            idPrefixes: manifest.idPrefixes,
-            season: _season,
-            episode: _episode,
-          );
-          if (mounted) {
-            setState(() {
-              // Best quality first for a premium feel.
-              streams.sort((a, b) => b.label.compareTo(a.label));
-              _results.addAll(streams);
-              _status.add('${manifest.name}: ${streams.length} found');
-            });
-          }
-        } catch (e) {
-          if (mounted) setState(() => _status.add('$base: unreachable'));
-        }
-      }));
-    }
-
-    await Future.wait(futures);
-    if (mounted) setState(() => _loading = false);
+    final season = _season;
+    final episode = _episode;
+    final result = await _provider.fetchStreams(
+      StreamDiscoveryQuery(
+          item: widget.item, season: season, episode: episode),
+    );
+    if (!mounted) return;
+    setState(() {
+      _results.addAll(result.streams);
+      _status.addAll(result.notices);
+      _loading = false;
+    });
   }
 
   void _onTapResult(StreamResult r) {

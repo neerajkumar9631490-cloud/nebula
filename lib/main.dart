@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_logo.dart';
-import 'services/torrent/torrent_service.dart';
+import 'streaming/torrserver_backend.dart';
 import 'services/stremio/addon_manager.dart';
 import 'screens/home_screen.dart';
 import 'screens/search_screen.dart';
@@ -13,7 +13,8 @@ import 'screens/settings_screen.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  TorrentService().initialize();
+  // Pre-warm engine + loopback server behind the backend interface.
+  TorrServerBackend().ensureReady();
   runApp(const MyApp());
 }
 

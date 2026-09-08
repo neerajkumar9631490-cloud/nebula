@@ -7,7 +7,9 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/stream_result.dart';
 import '../models/media_item.dart';
-import '../services/torrent/torrent_service.dart';
+import '../core/streaming/stream_manager.dart';
+import '../core/streaming/stream_request.dart';
+import '../streaming/torrserver_backend.dart';
 import '../services/watch_progress_service.dart';
 import '../theme/app_theme.dart';
 
@@ -24,12 +26,13 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   late final Player _player;
   late final VideoController _videoController;
-  final TorrentService _torrent = TorrentService();
+  // StreamManager is the UI's ONLY contact with streaming: it turns the
+  // provider result into a plain HTTP URL (direct file, or the engine's
+  // localhost URL for torrents). No BitTorrent concepts live here.
+  late final StreamManager _streams;
   final WatchProgressService _wp = WatchProgressService();
-  final ValueNotifier<TorrentStats?> _stats = ValueNotifier(null);
-  StreamSubscription<TorrentStats>? _statsSub;
   bool _playing = false, _buffering = true, _opened = false, _failed = false, _controlsVisible = true, _isTorrent = false;
-  TorrentPhase _phase = TorrentPhase.metadata;
+  EnginePhase _phase = EnginePhase.metadata;
   Duration _position = Duration.zero, _duration = Duration.zero;
   double _rate = 1.0, _volume = 100;
   int _openedAt = 0;
@@ -43,6 +46,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     WakelockPlus.enable();
     _player = Player(configuration: PlayerConfiguration(bufferSize: 32 * 1024 * 1024));
     _videoController = VideoController(_player);
+    final backend = TorrServerBackend();
+    _streams = StreamManager(engine: backend, server: backend);
     _subs.add(_player.streams.playing.listen((v) { if (mounted) setState(() => _playing = v); }));
     _subs.add(_player.streams.buffering.listen((v) { if (mounted) setState(() => _buffering = v); }));
     _subs.add(_player.streams.position.listen((v) { if (mounted) setState(() => _position = v); }));
@@ -64,20 +69,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _open() async {
     setState(() { _failed = false; _buffering = true; _openedAt = DateTime.now().millisecondsSinceEpoch; });
     try {
-      String? url = widget.result.url;
-      if (_isTorrent && widget.result.magnet != null) {
-        url = await _torrent.startStream(magnet: widget.result.magnet!, fileIndex: widget.result.fileIndex, onPhase: (p, s) { if (s != null) _stats.value = s; if (mounted && !_opened) setState(() => _phase = p); });
-        if (url == null) { if (mounted) setState(() => _failed = true); return; }
-        _statsSub?.cancel();
-        _statsSub = _torrent.statsStream(widget.result.magnet!).listen((s) => _stats.value = s);
-      }
-      await _player.open(Media(url!));
+      final resolved = await _streams.resolve(
+        widget.result,
+        onPhase: (p, s) { if (mounted && !_opened) setState(() => _phase = p); },
+      );
+      if (resolved == null) { if (mounted) setState(() => _failed = true); return; }
+      await _player.open(Media(resolved.url));
       if (mounted) setState(() => _opened = true);
       await _tryResume();
     } catch (e) { if (mounted) setState(() => _failed = true); }
   }
 
-  String _phaseText() => switch (_phase) { TorrentPhase.engine => 'Starting engine…', TorrentPhase.metadata => _isTorrent ? 'Fetching torrent info…' : 'Loading…', TorrentPhase.peers => 'Connecting to peers…', TorrentPhase.ready => 'Starting playback…', TorrentPhase.error => 'Engine could not start' };
+  String _phaseText() => switch (_phase) { EnginePhase.starting => _isTorrent ? 'Starting engine…' : 'Loading…', EnginePhase.metadata => _isTorrent ? 'Fetching torrent info…' : 'Loading…', EnginePhase.buffering => 'Connecting to peers…', EnginePhase.ready => 'Starting playback…', EnginePhase.error => 'Engine could not start' };
 
   Future<void> _tryResume() async {
     final progress = widget.item.mediaType == 'tv' ? await _wp.loadEpisode(widget.item.id, widget.season ?? 1, widget.episode ?? 1) : await _wp.loadMovie(widget.item.id);
@@ -121,8 +124,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void dispose() {
     _saveProgress(); _saveTimer?.cancel(); _hideTimer?.cancel(); _watchdog?.cancel();
     for (final s in _subs) s.cancel();
-    _statsSub?.cancel(); if (_isTorrent) _torrent.cleanup();
-    _player.dispose(); _stats.dispose(); WakelockPlus.disable();
+    _streams.dispose();
+    _player.dispose(); WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     super.dispose();
   }
@@ -188,8 +191,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w800, fontSize: 15)),
                             if (_isTorrent)
-                              ValueListenableBuilder<TorrentStats?>(
-                                valueListenable: _stats,
+                              ValueListenableBuilder<EngineStats?>(
+                                valueListenable: _streams.stats,
                                 builder: (c, s, _) => Text(
                                     s == null
                                         ? _phaseText()
@@ -290,8 +293,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           _roundBtn(Icons.forward_10_rounded, () => _seekBy(10)),
                           const Spacer(),
                           if (_isTorrent)
-                            ValueListenableBuilder<TorrentStats?>(
-                                valueListenable: _stats,
+                            ValueListenableBuilder<EngineStats?>(
+                                valueListenable: _streams.stats,
                                 builder: (c, s, _) => s == null
                                     ? const SizedBox.shrink()
                                     : Container(
@@ -364,8 +367,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           fontSize: 14,
                           fontWeight: FontWeight.w700)),
                   if (_isTorrent)
-                    ValueListenableBuilder<TorrentStats?>(
-                        valueListenable: _stats,
+                    ValueListenableBuilder<EngineStats?>(
+                        valueListenable: _streams.stats,
                         builder: (c, s, _) => s == null
                             ? const SizedBox.shrink()
                             : Padding(
