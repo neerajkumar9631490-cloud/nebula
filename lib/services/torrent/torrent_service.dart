@@ -55,6 +55,34 @@ class TorrentService {
 
   String? _extractHash(String magnet) => RegExp(r'[0-9a-fA-F]{40}').firstMatch(magnet)?.group(0)?.toLowerCase();
 
+  /// Healthy public trackers injected into magnets that arrive with few
+  /// (or dead) trackers. More trackers = more peers = more speed, and it
+  /// never changes the infohash, so the same content is fetched.
+  static const List<String> _extraTrackers = [
+    'udp://tracker.opentrackr.org:1337/announce',
+    'udp://open.stealth.si:80/announce',
+    'udp://tracker.torrent.eu.org:451/announce',
+    'udp://exodus.desync.com:6969/announce',
+    'udp://tracker.openbittorrent.com:6969/announce',
+    'udp://tracker.tiny-vps.com:6969/announce',
+    'udp://open.demonii.com:1337/announce',
+    'udp://tracker.moeking.me:6969/announce',
+    'udp://odd-hd.fr:6969/announce',
+    'udp://tracker.theoks.net:6969/announce',
+  ];
+
+  /// Appends any missing trackers from [_extraTrackers] as `&tr=` params.
+  /// Trackers already present (by host) are never duplicated.
+  static String enrichMagnet(String magnet) {
+    var out = magnet;
+    for (final tracker in _extraTrackers) {
+      final host = Uri.tryParse(tracker)?.host ?? '';
+      if (host.isEmpty || out.contains(host)) continue;
+      out += '&tr=${Uri.encodeComponent(tracker)}';
+    }
+    return out;
+  }
+
   /// Tunes the engine for streaming throughput, once per process.
   ///
   /// TorrServer ships conservative defaults (25 connections/torrent) that
@@ -121,11 +149,27 @@ class TorrentService {
             .timeout(const Duration(seconds: 8));
         if (saved.statusCode != 200) return false;
       }
+      await _logProfile(uri);
       _profileApplied = true;
       return true;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Verifies the tuned settings by reading them back (visible in
+  /// logcat as `[Movix]`), so throughput work is provable, not assumed.
+  Future<void> _logProfile(Uri uri) async {
+    try {
+      final res = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) return;
+      final decoded = json.decode(res.body);
+      if (decoded is! Map<String, dynamic>) return;
+      debugPrint('[Movix] engine profile: connections=${decoded['ConnectionsLimit']} '
+          'dl=${decoded['DownloadRateLimit']} ul=${decoded['UploadRateLimit']} '
+          'dht=${decoded['DisableDHT']} pex=${decoded['DisablePEX']} '
+          'upnp=${decoded['DisableUPNP']}');
+    } catch (_) {}
   }
 
   Future<List<TorrentFileStat>?> _waitForMetadata(String hash) async {
@@ -157,6 +201,8 @@ class TorrentService {
     if (!await initialize()) { onPhase?.call(TorrentPhase.error, null); return null; }
     final hash = _extractHash(magnet);
     if (hash == null) { onPhase?.call(TorrentPhase.error, null); return null; }
+    // Extra trackers widen the peer pool; the infohash is untouched.
+    magnet = enrichMagnet(magnet);
     try {
       onPhase?.call(TorrentPhase.metadata, null);
       final added = await _controller.addTorrent(magnet: magnet, title: null, saveToDb: false);
@@ -166,14 +212,28 @@ class TorrentService {
       if (files == null || files.isEmpty) { onPhase?.call(TorrentPhase.error, null); return null; }
       final fileId = _selectFile(files, preferredIdx: fileIndex);
       if (fileId == null) { onPhase?.call(TorrentPhase.error, null); return null; }
-      const minBytes = 2 * 1024 * 1024;
+      // Adaptive preload gate: ~0.5% of the file (the first seconds of
+      // video), clamped for tiny/huge files. Healthy swarms start even
+      // earlier; the timeout still lets slow ones through to the player.
+      const mb = 1024 * 1024;
+      var fileLen = 0;
+      for (final f in files) {
+        if (f.id == fileId) {
+          fileLen = f.length;
+          break;
+        }
+      }
+      var targetBytes = fileLen ~/ 200;
+      if (targetBytes < mb) targetBytes = mb;
+      if (targetBytes > 8 * mb) targetBytes = 8 * mb;
       final sw = Stopwatch()..start();
       while (sw.elapsed < const Duration(seconds: 30)) {
         try {
           final info = await _controller.getTorrent(th);
           final stats = TorrentStats(speedMbps: info.downloadSpeed / 1024 / 1024, activePeers: info.activePeers, progress: info.torrentSize > 0 ? info.loadedSize / info.torrentSize : 0, isReady: info.loadedSize > 0);
           onPhase?.call(TorrentPhase.peers, stats);
-          if (info.loadedSize >= minBytes) break;
+          if (info.loadedSize >= targetBytes) break;
+          if (info.loadedSize >= mb && info.downloadSpeed >= mb) break;
         } catch (_) {}
         await Future.delayed(const Duration(milliseconds: 400));
       }
