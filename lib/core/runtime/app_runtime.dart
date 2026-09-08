@@ -216,7 +216,7 @@ class AppRuntime {
   void dispatch(AppAction action) {
     if (_disposed) return;
     switch (action) {
-      case DiscoverStreams(:item, :season, :episode):
+      case DiscoverStreams(item: var item, season: var season, episode: var episode):
         _lastQuery =
             StreamDiscoveryQuery(item: item, season: season, episode: episode);
         _emit(_state.copyWith(
@@ -230,7 +230,7 @@ class AppRuntime {
             discovery:
                 const DiscoveryState(status: DiscoveryStatus.loading)));
         _execute(FetchStreamsEffect(query));
-      case ResolveStream(:result):
+      case ResolveStream(result: var result):
         _emit(_state.copyWith(
             playback: const PlaybackState(
                 status: PlaybackStatus.resolving,
@@ -239,28 +239,28 @@ class AppRuntime {
       case CancelPlaybackPrep():
         _playback.cancel();
         _emit(_state.copyWith(playback: const PlaybackState()));
-      case DiscoverySucceeded(:streams, :notices):
+      case DiscoverySucceeded(streams: var streams, notices: var notices):
         _emit(_state.copyWith(
             discovery: DiscoveryState(
                 status: DiscoveryStatus.loaded,
                 streams: streams,
                 notices: notices)));
-      case DiscoveryFailed(:message):
+      case DiscoveryFailed(message: var message):
         _emit(_state.copyWith(
             discovery: DiscoveryState(
                 status: DiscoveryStatus.failed, error: message)));
         _events.add(CoreErrorEvent(message, 'discovery'));
-      case ResolveProgressed(:phase):
+      case ResolveProgressed(phase: var phase):
         _emit(_state.copyWith(
             playback: PlaybackState(
                 status: PlaybackStatus.resolving, phase: phase)));
-      case ResolveSucceeded(:stream):
+      case ResolveSucceeded(stream: var stream):
         _emit(_state.copyWith(
             playback: PlaybackState(
                 status: PlaybackStatus.ready,
                 phase: EnginePhase.ready,
                 stream: stream)));
-      case ResolveFailed(:message):
+      case ResolveFailed(message: var message):
         _emit(_state.copyWith(
             playback: PlaybackState(
                 status: PlaybackStatus.failed,
@@ -274,14 +274,14 @@ class AppRuntime {
   /// internal actions. The only place providers/engine are touched.
   Future<void> _execute(AppEffect effect) async {
     switch (effect) {
-      case FetchStreamsEffect(:query):
+      case FetchStreamsEffect(query: var query):
         try {
           final result = await discovery.fetchStreams(query);
           dispatch(DiscoverySucceeded(result.streams, result.notices));
         } catch (e) {
           dispatch(DiscoveryFailed(e.toString()));
         }
-      case ResolveStreamEffect(:result):
+      case ResolveStreamEffect(result: var result):
         try {
           final resolved = await _playback.resolve(
             result,
