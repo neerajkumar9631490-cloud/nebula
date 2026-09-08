@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../models/stream_result.dart';
-import '../core/providers/stream_provider.dart';
+import '../core/bridge/host_bridge.dart';
+import '../core/runtime/app_runtime.dart';
 import '../providers/stremio_provider.dart';
+import '../streaming/torrserver_backend.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import 'addons_screen.dart';
@@ -25,12 +28,11 @@ class SourcesScreen extends StatefulWidget {
 }
 
 class _SourcesScreenState extends State<SourcesScreen> {
-  // Provider abstraction only — all Stremio-protocol details live in
-  // StremioStreamProvider. The UI renders streams + status notices.
-  final StreamProvider _provider = StremioStreamProvider();
-  final List<StreamResult> _results = [];
-  final List<String> _status = [];
-  bool _loading = true;
+  // Thin UI: all discovery runs in the runtime. This screen only
+  // dispatches Actions and renders AppState snapshots + Events.
+  late final AppRuntime _rt;
+  StreamSubscription<AppState>? _rtSub;
+  StreamSubscription<CoreEvent>? _evtSub;
   late TextEditingController _seasonCtrl;
   late TextEditingController _episodeCtrl;
 
@@ -41,6 +43,23 @@ class _SourcesScreenState extends State<SourcesScreen> {
   @override
   void initState() {
     super.initState();
+    final backend = TorrServerBackend();
+    _rt = AppRuntime(
+      discovery: StremioStreamProvider(),
+      engine: backend,
+      server: backend,
+      bridge: PluginHostBridge(),
+    );
+    _rtSub = _rt.states.listen((_) {
+      if (mounted) setState(() {});
+    });
+    _evtSub = _rt.events.listen((event) {
+      if (event is CoreErrorEvent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(event.message)),
+        );
+      }
+    });
     _seasonCtrl = TextEditingController(text: widget.season.toString());
     _episodeCtrl = TextEditingController(text: widget.episode.toString());
     _run();
@@ -48,30 +67,24 @@ class _SourcesScreenState extends State<SourcesScreen> {
 
   @override
   void dispose() {
+    _rtSub?.cancel();
+    _evtSub?.cancel();
+    _rt.dispose();
     _seasonCtrl.dispose();
     _episodeCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _run() async {
-    setState(() {
-      _loading = true;
-      _results.clear();
-      _status.clear();
-    });
-
-    final season = _season;
-    final episode = _episode;
-    final result = await _provider.fetchStreams(
-      StreamDiscoveryQuery(
-          item: widget.item, season: season, episode: episode),
-    );
-    if (!mounted) return;
-    setState(() {
-      _results.addAll(result.streams);
-      _status.addAll(result.notices);
-      _loading = false;
-    });
+  void _run() {
+    // The runtime snapshot updates synchronously on dispatch, so one
+    // setState here shows the spinner immediately; later snapshots
+    // arrive through the states subscription above.
+    _rt.dispatch(DiscoverStreams(
+      item: widget.item,
+      season: _season,
+      episode: _episode,
+    ));
+    setState(() {});
   }
 
   void _onTapResult(StreamResult r) {
@@ -126,8 +139,30 @@ class _SourcesScreenState extends State<SourcesScreen> {
     );
   }
 
+  Widget _ccChip(int count) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppTheme.info.withOpacity(0.13),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.info.withOpacity(0.4)),
+      ),
+      child: Text(count > 1 ? 'CC $count' : 'CC',
+          style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.info,
+              letterSpacing: 0.6)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Rendered exclusively from the runtime snapshot.
+    final discovery = _rt.state.discovery;
+    final loading = discovery.status == DiscoveryStatus.loading;
+    final results = discovery.streams;
+    final notices = discovery.notices;
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -155,11 +190,11 @@ class _SourcesScreenState extends State<SourcesScreen> {
             padding: const EdgeInsets.only(right: 12),
             child: IconButton(
                 icon: AnimatedRotation(
-                  turns: _loading ? 1 : 0,
+                  turns: loading ? 1 : 0,
                   duration: const Duration(milliseconds: 600),
                   child: const Icon(Icons.refresh_rounded),
                 ),
-                onPressed: _loading ? null : _run),
+                onPressed: loading ? null : _run),
           ),
         ],
       ),
@@ -205,7 +240,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                     ),
                     const Spacer(),
                     Pressable(
-                      onTap: _loading ? null : _run,
+                      onTap: loading ? null : _run,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 10),
@@ -243,18 +278,18 @@ class _SourcesScreenState extends State<SourcesScreen> {
                             height: 9,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: _loading
+                              color: loading
                                   ? AppTheme.warn
-                                  : (_results.isEmpty
+                                  : (results.isEmpty
                                       ? AppTheme.danger
                                       : AppTheme.accent),
                             ),
                           ),
                           const SizedBox(width: 9),
                           Text(
-                              _loading
+                              loading
                                   ? 'Scanning sources…'
-                                  : 'Scan complete • ${_results.length} streams',
+                                  : 'Scan complete • ${results.length} streams',
                               style: const TextStyle(
                                   fontWeight: FontWeight.w800,
                                   color: AppTheme.text,
@@ -262,10 +297,10 @@ class _SourcesScreenState extends State<SourcesScreen> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      if (_status.isEmpty)
+                      if (notices.isEmpty)
                         const Text('Contacting add-ons…',
                             style: TextStyle(color: AppTheme.textDim, fontSize: 13)),
-                      ..._status.map((s) => Padding(
+                      ...notices.map((s) => Padding(
                             padding: const EdgeInsets.symmetric(vertical: 2.5),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,7 +321,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                               ],
                             ),
                           )),
-                      if (_loading)
+                      if (loading)
                         const Padding(
                           padding: EdgeInsets.only(top: 12),
                           child: LinearProgressIndicator(minHeight: 3.5),
@@ -295,13 +330,13 @@ class _SourcesScreenState extends State<SourcesScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                Text('Results (${_results.length})',
+                Text('Results (${results.length})',
                     style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
                         color: AppTheme.text)),
                 const SizedBox(height: 12),
-                if (_results.isEmpty && !_loading)
+                if (results.isEmpty && !loading)
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
@@ -325,7 +360,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                       ],
                     ),
                   ),
-                ..._results.asMap().entries.map((e) {
+                ...results.asMap().entries.map((e) {
                   final i = e.key;
                   final r = e.value;
                   final best = i < 3;
@@ -399,7 +434,16 @@ class _SourcesScreenState extends State<SourcesScreen> {
                                 style: const TextStyle(
                                     color: AppTheme.textDim, fontSize: 12.5)),
                           ),
-                          trailing: _pill(r.kind),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (r.subtitles.isNotEmpty) ...[
+                                _ccChip(r.subtitles.length),
+                                const SizedBox(width: 6),
+                              ],
+                              _pill(r.kind),
+                            ],
+                          ),
                           onTap: () => _onTapResult(r),
                         ),
                       ),

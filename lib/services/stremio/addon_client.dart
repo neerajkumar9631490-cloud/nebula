@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../models/media_item.dart';
 import '../../models/stream_result.dart';
+import '../../models/subtitle_track.dart';
 
 /// An extra filter a catalog accepts, e.g. genre or search.
 /// Manifests declare these as maps ({name, isRequired, options})
@@ -248,6 +249,15 @@ class AddonClient {
           .whereType<String>()
           .where((e) => e.trim().isNotEmpty)
           .join(' • ');
+      final subtitles = <SubtitleTrack>[];
+      final rawSubs = s['subtitles'];
+      if (rawSubs is List) {
+        for (final st in rawSubs.whereType<Map<String, dynamic>>()) {
+          final subUrl = st['url']?.toString() ?? '';
+          if (subUrl.isEmpty) continue;
+          subtitles.add(SubtitleTrack.fromJson(st));
+        }
+      }
 
       if (url != null && url.startsWith('http')) {
         final kind = url.contains('.m3u8') ? StreamKind.hls : StreamKind.http;
@@ -256,6 +266,7 @@ class AddonClient {
           label: label.isEmpty ? 'Stream' : label,
           url: url,
           kind: kind,
+          subtitles: subtitles,
         ));
       } else if (infoHash != null || (url != null && url.startsWith('magnet:'))) {
         final magnet = url?.startsWith('magnet:') == true
@@ -266,6 +277,7 @@ class AddonClient {
           label: label.isEmpty ? 'Torrent source' : label,
           kind: StreamKind.torrent,
           magnet: magnet,
+          subtitles: subtitles,
         ));
       } else if (externalUrl != null) {
         results.add(StreamResult(
@@ -273,6 +285,7 @@ class AddonClient {
           label: '${label.isEmpty ? 'External link' : label} [external]',
           url: externalUrl,
           kind: StreamKind.external,
+          subtitles: subtitles,
         ));
       }
     }
