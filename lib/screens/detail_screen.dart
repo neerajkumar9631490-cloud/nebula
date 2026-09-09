@@ -333,7 +333,8 @@ class _DetailScreenState extends State<DetailScreen> {
     final statusH = MediaQuery.of(context).padding.top;
     final hasBackdrop = widget.item.backdropPath != null;
     return Scaffold(
-      backgroundColor: AppTheme.bg,
+      // Pure black canvas like a cinema — artwork carries the color.
+      backgroundColor: Colors.black,
       floatingActionButtonLocation:
           FloatingActionButtonLocation.centerFloat,
       floatingActionButton: Pressable(
@@ -417,7 +418,7 @@ class _DetailScreenState extends State<DetailScreen> {
                     Container(
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Color(0xFF0B1F15), AppTheme.bg],
+                          colors: [Color(0xFF0B1F15), Colors.black],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -428,7 +429,7 @@ class _DetailScreenState extends State<DetailScreen> {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Colors.transparent, AppTheme.bg],
+                        colors: [Colors.transparent, Colors.black],
                         stops: [0.55, 1.0],
                       ),
                     ),
@@ -483,15 +484,16 @@ class _DetailScreenState extends State<DetailScreen> {
           child: Center(
             child: Pressable(
               onTap: _openSources,
+              // Flat white player button — like a real video player.
+              // The floating Watch pill keeps the single glow on screen.
               child: Container(
                 padding: const EdgeInsets.all(17),
-                decoration: BoxDecoration(
-                  gradient: AppTheme.accentGradient,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
                   shape: BoxShape.circle,
-                  boxShadow: AppTheme.glowShadow,
                 ),
                 child: const Icon(Icons.play_arrow_rounded,
-                    color: AppTheme.onAccent, size: 34),
+                    color: Colors.black, size: 34),
               ),
             ),
           ),
@@ -513,7 +515,7 @@ class _DetailScreenState extends State<DetailScreen> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                  fontSize: 23,
+                  fontSize: 24,
                   fontWeight: FontWeight.w800,
                   color: AppTheme.text,
                   letterSpacing: -0.3),
@@ -629,7 +631,7 @@ class _DetailScreenState extends State<DetailScreen> {
         padding:
             const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.09),
+          color: const Color(0xFF1F1F1F),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
               color: highlighted
@@ -674,9 +676,8 @@ class _DetailScreenState extends State<DetailScreen> {
         child: Container(
           padding: const EdgeInsets.all(13),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.06),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.stroke),
+            color: const Color(0xFF1F1F1F),
+            borderRadius: BorderRadius.circular(14),
           ),
           child: Row(
             children: [
@@ -830,9 +831,8 @@ class _DetailScreenState extends State<DetailScreen> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           gradient: selected ? AppTheme.accentGradient : null,
-          color: selected ? null : Colors.white.withOpacity(0.09),
+          color: selected ? null : const Color(0xFF1F1F1F),
           borderRadius: BorderRadius.circular(12),
-          boxShadow: selected ? AppTheme.glowShadow : null,
         ),
         child: Text(label,
             style: TextStyle(
