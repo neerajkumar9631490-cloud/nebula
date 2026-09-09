@@ -62,6 +62,21 @@ class Track {
         quality: j['quality']?.toString() ?? 'Preview',
         explicit: j['explicit'] == true,
       );
+
+  /// PlayTorrio-compat helpers so ported services can share logic.
+  int get durationSeconds =>
+      durationMs > 0 ? (durationMs ~/ 1000) : 0;
+  String get coverUrl =>
+      artworkLarge.isNotEmpty ? artworkLarge : artworkSmall;
+  String get previewUrl => audioUrl;
+
+  String get formattedDuration {
+    final total = durationSeconds;
+    if (total <= 0) return '--:--';
+    final mins = (total ~/ 60).toString().padLeft(2, '0');
+    final secs = (total % 60).toString().padLeft(2, '0');
+    return '$mins:$secs';
+  }
 }
 
 class Artist {
@@ -154,6 +169,55 @@ class MusicGenre {
   final String name;
 
   const MusicGenre({required this.id, required this.name});
+}
+
+/// Synced lyrics, ported from PlayTorrio's `LyricsData`.
+class SyncedLyricLine {
+  final Duration timestamp;
+  final String text;
+
+  const SyncedLyricLine({required this.timestamp, required this.text});
+
+  Map<String, dynamic> toJson() => {
+        'timestampMs': timestamp.inMilliseconds,
+        'text': text,
+      };
+
+  factory SyncedLyricLine.fromJson(Map<String, dynamic> json) =>
+      SyncedLyricLine(
+        timestamp: Duration(milliseconds: json['timestampMs'] as int? ?? 0),
+        text: json['text'] as String? ?? '',
+      );
+}
+
+class LyricsData {
+  final String trackId;
+  final bool isSynced;
+  final String plainLyrics;
+  final List<SyncedLyricLine> syncedLines;
+
+  const LyricsData({
+    required this.trackId,
+    required this.isSynced,
+    required this.plainLyrics,
+    required this.syncedLines,
+  });
+
+  const LyricsData.empty()
+      : trackId = '',
+        isSynced = false,
+        plainLyrics = '',
+        syncedLines = const [];
+
+  static LyricsData emptyData() => const LyricsData.empty();
+
+  int activeLineIndex(Duration position) {
+    if (!isSynced || syncedLines.isEmpty) return -1;
+    for (var i = syncedLines.length - 1; i >= 0; i--) {
+      if (position >= syncedLines[i].timestamp) return i;
+    }
+    return -1;
+  }
 }
 
 class ArtistDetails {

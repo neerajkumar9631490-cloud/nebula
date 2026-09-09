@@ -3,7 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart' hide Track, Playlist;
 import '../models/music_models.dart';
 import '../services/audio_source_resolver.dart';
+import '../services/lyrics_service.dart';
 import '../services/music_library_service.dart';
+import '../services/music_settings.dart';
 import 'music_queue.dart';
 
 export 'music_queue.dart' show MusicRepeatMode;
@@ -31,6 +33,9 @@ class MusicPlayerState {
   final double rate;
   final int position; // queue position, -1 when none
   final int queueLength;
+  final String qualityLabel;
+  final bool isLossless;
+  final MusicAudioSource audioSource;
 
   const MusicPlayerState({
     this.status = MusicStatus.idle,
@@ -42,6 +47,9 @@ class MusicPlayerState {
     this.rate = 1.0,
     this.position = -1,
     this.queueLength = 0,
+    this.qualityLabel = 'Preview',
+    this.isLossless = false,
+    this.audioSource = MusicAudioSource.flac,
   });
 }
 
@@ -60,6 +68,7 @@ class MusicPlayerController {
     _subs.add(_player.streams.position.listen((d) {
       _lastPosition = d;
       if (!_position.isClosed) _position.add(d);
+      _updateActiveLyricIndex();
     }));
     _subs.add(_player.streams.duration.listen((d) {
       _lastDuration = d ?? Duration.zero;
@@ -69,14 +78,20 @@ class MusicPlayerController {
 
   final Player _player = Player();
   final MusicQueue queue = MusicQueue();
-  // Full tracks first (Audius), preview refresh as fallback.
-  final AudioSourceResolver _resolver = PrioritizedAudioResolver(
-    resolvers: [AudiusAudioResolver(), PreviewAudioResolver()],
-  );
+  // PlayTorrio-order chain: offline -> Audius full track -> Qobuz FLAC
+  // -> YouTube HQ -> provider preview.
+  final AudioSourceResolver _resolver = playTorrioAudioChain();
   final MusicLibraryService _library = MusicLibraryService();
+  final LyricsService _lyrics = LyricsService.instance;
 
   final ValueNotifier<MusicPlayerState> state =
       ValueNotifier(const MusicPlayerState());
+  // PlayTorrio-style lyric sync: current lines + active index follow
+  // position ticks without rebuilding the whole player UI.
+  final ValueNotifier<LyricsData> currentLyrics =
+      ValueNotifier(const LyricsData.empty());
+  final ValueNotifier<bool> isLoadingLyrics = ValueNotifier(false);
+  final ValueNotifier<int> activeLyricIndex = ValueNotifier(-1);
   final StreamController<Duration> _position =
       StreamController<Duration>.broadcast();
   final StreamController<Duration?> _duration =
@@ -96,8 +111,13 @@ class MusicPlayerController {
   Duration get currentDuration => _lastDuration;
 
   MusicPlayerState _snapshot(
-      {MusicStatus? status, String? error, bool clearError = false}) {
+      {MusicStatus? status,
+      String? error,
+      bool clearError = false,
+      String? qualityLabel,
+      bool? isLossless}) {
     final s = state.value;
+    final q = qualityLabel ?? s.qualityLabel;
     return MusicPlayerState(
       status: status ?? s.status,
       current: queue.current,
@@ -108,6 +128,9 @@ class MusicPlayerController {
       rate: _rate,
       position: queue.position,
       queueLength: queue.length,
+      qualityLabel: q,
+      isLossless: isLossless ?? _isLosslessQuality(q),
+      audioSource: MusicSettings.instance.source,
     );
   }
 
@@ -128,7 +151,7 @@ class MusicPlayerController {
 
   Future<void> playTrack(Track track) => playTracks([track]);
 
-  Future<void> _playCurrent() async {
+  Future<void> _playCurrent({Duration? startPosition}) async {
     final myGen = _gen;
     final item = queue.current;
     if (item == null) {
@@ -136,11 +159,12 @@ class MusicPlayerController {
       return;
     }
     _emit(_snapshot(status: MusicStatus.loading, clearError: true));
+    _fetchLyrics(item.track);
     AudioSource src;
     try {
       src = await _resolver
           .resolveTrack(item.track)
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 25));
     } catch (e) {
       if (myGen != _gen) return;
       return _skipFailed(e is AudioResolveException
@@ -148,11 +172,15 @@ class MusicPlayerController {
           : 'Could not load "${item.track.title}".');
     }
     if (myGen != _gen) return;
+    _emit(_snapshot(qualityLabel: src.quality, clearError: true));
     try {
       await _player.open(Media(src.url)).timeout(
             const Duration(seconds: 20),
           );
       await _player.play();
+      if (startPosition != null && startPosition > Duration.zero) {
+        await _player.seek(startPosition);
+      }
     } catch (_) {
       if (myGen != _gen) return;
       return _skipFailed('Playback failed.');
@@ -160,6 +188,53 @@ class MusicPlayerController {
     if (myGen != _gen) return;
     _skipStreak = 0;
     unawaited(_library.recordPlay(item.track));
+  }
+
+  /// Switches the PlayTorrio-style audio source (FLAC <-> YouTube) and
+  /// reloads the current track in place, preserving position.
+  Future<void> setAudioSource(MusicAudioSource source) async {
+    if (MusicSettings.instance.source == source) return;
+    await MusicSettings.instance.setSource(source);
+    _emit(_snapshot(clearError: true));
+    final item = queue.current;
+    if (item != null &&
+        (state.value.status == MusicStatus.playing ||
+            state.value.status == MusicStatus.paused ||
+            state.value.status == MusicStatus.buffering)) {
+      _gen++;
+      await _playCurrent(startPosition: _lastPosition);
+    }
+  }
+
+  bool _isLosslessQuality(String q) {
+    final lower = q.toLowerCase();
+    return lower.contains('flac') || lower.contains('lossless');
+  }
+
+  Future<void> _fetchLyrics(Track track) async {
+    isLoadingLyrics.value = true;
+    activeLyricIndex.value = -1;
+    try {
+      final lyrics = await _lyrics.getLyrics(track);
+      if (queue.current?.track.id == track.id) {
+        currentLyrics.value = lyrics;
+        isLoadingLyrics.value = false;
+        _updateActiveLyricIndex();
+      }
+    } catch (_) {
+      if (queue.current?.track.id == track.id) {
+        isLoadingLyrics.value = false;
+      }
+    }
+  }
+
+  void _updateActiveLyricIndex() {
+    final lyrics = currentLyrics.value;
+    if (lyrics.isSynced && lyrics.syncedLines.isNotEmpty) {
+      activeLyricIndex.value = lyrics.activeLineIndex(_lastPosition);
+    } else {
+      activeLyricIndex.value = -1;
+    }
   }
 
   /// Dead tracks are skipped automatically (bounded — never loops).
@@ -259,6 +334,8 @@ class MusicPlayerController {
   Future<void> seek(Duration position) async {
     try {
       await _player.seek(position);
+      _lastPosition = position;
+      _updateActiveLyricIndex();
     } catch (_) {}
   }
 

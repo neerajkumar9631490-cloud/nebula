@@ -35,14 +35,74 @@ abstract class MusicProvider {
 }
 
 Future<Map<String, dynamic>?> _getJson(Uri uri) async {
-  try {
-    final res =
-        await http.get(uri).timeout(const Duration(seconds: 12));
-    if (res.statusCode != 200) return null;
-    final decoded = json.decode(res.body);
-    return decoded is Map<String, dynamic> ? decoded : null;
-  } catch (_) {
-    return null;
+  return DeezerHttp.getJson(uri);
+}
+
+/// Deezer HTTP layer with PlayTorrio's geo-restriction proxy fallback:
+/// probes the API once, then retries failed calls through a CORS proxy.
+class DeezerHttp {
+  static const _proxyPrefix =
+      'https://wave-proxy.aymanisthedude1.workers.dev/proxy?url=';
+  static bool useProxy = false;
+  static bool _geoChecked = false;
+
+  static const _headers = {
+    'Accept': 'application/json',
+    'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+  };
+
+  static Future<void> _checkGeo() async {
+    if (_geoChecked) return;
+    _geoChecked = true;
+    try {
+      final res = await http
+          .get(Uri.parse('https://api.deezer.com/search?q=believer'),
+              headers: _headers)
+          .timeout(const Duration(seconds: 4));
+      if (res.statusCode != 200) {
+        useProxy = true;
+        return;
+      }
+      final data = json.decode(res.body);
+      if (data is Map &&
+          (data['error'] != null ||
+              (data['data'] is List && (data['data'] as List).isEmpty))) {
+        useProxy = true;
+      } else {
+        useProxy = false;
+      }
+    } catch (_) {
+      useProxy = true;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getJson(Uri uri) async {
+    await _checkGeo();
+    final direct = await _fetch(uri, proxied: false);
+    if (direct != null) return direct;
+    if (!useProxy) {
+      useProxy = true;
+      return _fetch(uri, proxied: true);
+    }
+    return _fetch(uri, proxied: true);
+  }
+
+  static Future<Map<String, dynamic>?> _fetch(Uri uri,
+      {required bool proxied}) async {
+    try {
+      final target = proxied
+          ? Uri.parse('$_proxyPrefix${Uri.encodeComponent(uri.toString())}')
+          : uri;
+      final res = await http
+          .get(target, headers: _headers)
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) return null;
+      final decoded = json.decode(res.body);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
   }
 }
 

@@ -1,6 +1,10 @@
 import '../models/music_models.dart';
 import 'audius_provider.dart';
+import 'lossless_audio_service.dart';
+import 'lyrics_service.dart';
 import 'music_provider.dart';
+import 'music_settings.dart';
+import 'youtube_stream_resolver.dart';
 
 /// Combined music search result, grouped the way the UI renders it.
 class MusicSearchResult {
@@ -221,4 +225,132 @@ class MusicService {
     }
     return track.audioUrl.isNotEmpty ? track : null;
   }
+
+  /// PlayTorrio-style stream pick: FLAC lossless first (or YouTube when
+  /// the user prefers it), falling back across the other source.
+  Future<MusicStreamResult?> getAudioStream(
+    Track track, {
+    MusicAudioSource source = MusicAudioSource.flac,
+  }) async {
+    if (source == MusicAudioSource.flac) {
+      try {
+        final flac =
+            await LosslessAudioService.instance.resolveLosslessUrl(track);
+        if (flac != null && flac.url.isNotEmpty) {
+          return MusicStreamResult(
+            url: flac.url,
+            quality: flac.quality,
+            format: flac.format,
+            isLossless: true,
+          );
+        }
+      } catch (_) {}
+    }
+    final yt = await YoutubeStreamResolver.instance.resolveUrl(track);
+    if (yt != null && yt.url.isNotEmpty) {
+      return MusicStreamResult(
+        url: yt.url,
+        quality: 'YouTube HQ',
+        format: 'm4a',
+        isLossless: false,
+      );
+    }
+    if (track.audioUrl.isNotEmpty) {
+      return MusicStreamResult(
+          url: track.audioUrl,
+          quality: track.quality,
+          format: 'mp3',
+          isLossless: false);
+    }
+    return null;
+  }
+
+  /// PlayTorrio-style synced/plain lyrics for the player sheet.
+  Future<LyricsData> fetchLyrics(Track track) =>
+      LyricsService.instance.getLyrics(track);
+
+  /// PlayTorrio home rows: global chart + curated mood searches.
+  Future<Map<String, List<Track>>> fetchFeaturedSections() async {
+    const queries = {
+      'Top Global & Trending Hits': null,
+      'Pop Essentials': 'Top Pop Hits',
+      'Hip-Hop & Rap Heavyweights': 'Hip Hop Hits',
+      'Electronic, Dance & EDM': 'Electronic Dance',
+      'Rock Classics & Alternative': 'Rock Essentials',
+      'Chill, Lofi & Ambient Beats': 'Lofi Beats Chill',
+    };
+    final out = <String, List<Track>>{};
+    final deezer = _deezer();
+    if (deezer == null) return featuredSections();
+    try {
+      final chart = await deezer.chartTracks(limit: 25);
+      if (chart.isNotEmpty) {
+        out['Top Global & Trending Hits'] = chart;
+      }
+      for (final entry in queries.entries.skip(1)) {
+        try {
+          final tracks =
+              await deezer.searchTracks(entry.value!, limit: 15);
+          if (tracks.isNotEmpty) out[entry.key] = tracks;
+        } catch (_) {}
+      }
+    } catch (_) {}
+    if (out.isEmpty) return featuredSections();
+    return out;
+  }
+
+  Future<List<Artist>> fetchTrendingArtists({int limit = 20}) async {
+    final deezer = _deezer();
+    if (deezer == null) return [];
+    try {
+      final details = await deezer.chartTracks(limit: limit);
+      final seen = <String>{};
+      final artists = <Artist>[];
+      for (final t in details) {
+        if (t.artistId.isEmpty || !seen.add(t.artistId)) continue;
+        artists.add(Artist(
+          id: 'deezer:${t.artistId}',
+          name: t.artist,
+          artwork: t.artworkSmall,
+          source: 'deezer',
+        ));
+      }
+      return artists;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<Album>> fetchNewReleases({int limit = 20}) async {
+    final deezer = _deezer();
+    if (deezer == null) return [];
+    try {
+      return await deezer.newReleases(limit: limit);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<RemotePlaylist>> fetchCuratedPlaylists({int limit = 20}) async {
+    try {
+      return await chartPlaylists(limit: limit);
+    } catch (_) {
+      return [];
+    }
+  }
+}
+
+/// Resolved playable stream with quality metadata for badges.
+class MusicStreamResult {
+  final String url;
+  final String quality;
+  final String format;
+  final bool isLossless;
+
+  const MusicStreamResult({
+    required this.url,
+    this.quality = 'Preview',
+    this.format = 'mp3',
+    this.isLossless = false,
+  });
 }

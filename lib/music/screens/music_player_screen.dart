@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../models/music_models.dart';
 import '../player/music_player_controller.dart';
+import '../services/music_settings.dart';
 import '../widgets/queue_sheet.dart';
 import '../widgets/track_tile.dart';
 
@@ -125,6 +126,7 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
               ),
               const SizedBox(height: 18),
               _slider(),
+              _qualityRow(s),
               if (s.status == MusicStatus.error &&
                   s.error != null) ...[
                 const SizedBox(height: 6),
@@ -140,6 +142,8 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
               _transport(playing, s),
               const SizedBox(height: 18),
               _bottomRow(s),
+              const SizedBox(height: 18),
+              _lyricsCard(),
             ],
           );
         },
@@ -335,6 +339,212 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _qualityRow(MusicPlayerState s) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        children: [
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: s.isLossless
+                  ? AppTheme.accent.withOpacity(0.16)
+                  : Colors.white.withOpacity(0.07),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: s.isLossless
+                    ? AppTheme.accent.withOpacity(0.5)
+                    : AppTheme.stroke,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  s.isLossless
+                      ? Icons.high_quality_rounded
+                      : Icons.audiotrack_rounded,
+                  size: 14,
+                  color: s.isLossless
+                      ? AppTheme.accent
+                      : AppTheme.textDim,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  s.qualityLabel.isEmpty ? 'Preview' : s.qualityLabel,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: s.isLossless
+                        ? AppTheme.accent
+                        : AppTheme.textDim,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          SegmentedButton<MusicAudioSource>(
+            showSelectedIcon: false,
+            style: SegmentedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              side: const BorderSide(color: AppTheme.stroke),
+              selectedForegroundColor: AppTheme.onAccent,
+              selectedBackgroundColor: AppTheme.accent,
+            ),
+            segments: const [
+              ButtonSegment(
+                value: MusicAudioSource.flac,
+                label: Text('FLAC', style: TextStyle(fontSize: 11)),
+              ),
+              ButtonSegment(
+                value: MusicAudioSource.youtube,
+                label: Text('YouTube', style: TextStyle(fontSize: 11)),
+              ),
+            ],
+            selected: {s.audioSource},
+            onSelectionChanged: (sel) =>
+                _controller.setAudioSource(sel.first),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _lyricsCard() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _controller.isLoadingLyrics,
+      builder: (context, loading, _) {
+        return ValueListenableBuilder<LyricsData>(
+          valueListenable: _controller.currentLyrics,
+          builder: (context, lyrics, _) {
+            if (loading) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                ),
+              );
+            }
+            if (lyrics.plainLyrics.isEmpty) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.stroke),
+                ),
+                child: const Text(
+                  'No lyrics found for this track.',
+                  style:
+                      TextStyle(fontSize: 13, color: AppTheme.textDim),
+                ),
+              );
+            }
+            if (!lyrics.isSynced) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.stroke),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.lyrics_outlined,
+                            size: 16, color: AppTheme.textDim),
+                        SizedBox(width: 8),
+                        Text('LYRICS',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.6,
+                                color: AppTheme.textDim)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      lyrics.plainLyrics,
+                      style: const TextStyle(
+                          fontSize: 13.5,
+                          height: 1.6,
+                          color: AppTheme.text),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.stroke),
+              ),
+              child: ValueListenableBuilder<int>(
+                valueListenable: _controller.activeLyricIndex,
+                builder: (context, active, _) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.lyrics_outlined,
+                              size: 16, color: AppTheme.accent),
+                          SizedBox(width: 8),
+                          Text('SYNCED LYRICS',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.6,
+                                  color: AppTheme.accent)),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ...List.generate(lyrics.syncedLines.length,
+                          (i) {
+                        final line = lyrics.syncedLines[i];
+                        final isActive = i == active;
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Text(
+                            line.text.isEmpty ? '…' : line.text,
+                            style: TextStyle(
+                              fontSize: isActive ? 15.5 : 13.5,
+                              height: 1.5,
+                              fontWeight: isActive
+                                  ? FontWeight.w800
+                                  : FontWeight.w400,
+                              color: isActive
+                                  ? AppTheme.text
+                                  : AppTheme.textDim,
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
+                  );
+                },
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

@@ -10,6 +10,9 @@ import 'screens/library_screen.dart';
 import 'screens/addons_screen.dart';
 import 'screens/settings_screen.dart';
 import 'music/screens/music_home_screen.dart';
+import 'music/services/lossless_audio_service.dart';
+import 'music/services/music_download_service.dart';
+import 'music/services/music_settings.dart';
 import 'music/widgets/mini_player.dart';
 
 void main() {
@@ -41,6 +44,9 @@ class _MyAppState extends State<MyApp> {
   Future<void> _init() async {
     await Future.wait([
       AddonManager.ensureSeeded(),
+      MusicSettings.instance.ensureLoaded(),
+      LosslessAudioService.instance.initialize(),
+      MusicDownloadService.instance.init(),
       // Small staged delay so the splash feels intentional, not flickery.
       Future.delayed(const Duration(milliseconds: 650)),
     ]);
