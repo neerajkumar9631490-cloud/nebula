@@ -69,7 +69,10 @@ class MusicPlayerController {
 
   final Player _player = Player();
   final MusicQueue queue = MusicQueue();
-  final PreviewAudioResolver _resolver = PreviewAudioResolver();
+  // Full tracks first (Audius), preview refresh as fallback.
+  final AudioSourceResolver _resolver = PrioritizedAudioResolver(
+    resolvers: [AudiusAudioResolver(), PreviewAudioResolver()],
+  );
   final MusicLibraryService _library = MusicLibraryService();
 
   final ValueNotifier<MusicPlayerState> state =

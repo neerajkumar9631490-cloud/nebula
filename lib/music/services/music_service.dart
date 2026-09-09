@@ -1,4 +1,5 @@
 import '../models/music_models.dart';
+import 'audius_provider.dart';
 import 'music_provider.dart';
 
 /// Combined music search result, grouped the way the UI renders it.
@@ -28,9 +29,15 @@ class MusicSearchResult {
 class MusicService {
   final List<MusicProvider> providers;
 
+  /// Audius first: its tracks are full-length, so they surface
+  /// at the top of merged results.
   MusicService({List<MusicProvider>? providers})
       : providers = providers ??
-            [DeezerMusicProvider(), ItunesMusicProvider()];
+            [
+              AudiusMusicProvider(),
+              DeezerMusicProvider(),
+              ItunesMusicProvider(),
+            ];
 
   Future<MusicSearchResult> searchAll(String query) async {
     final q = query.trim();
@@ -113,6 +120,13 @@ class MusicService {
     final deezer = _deezer();
     if (deezer == null) return {};
     final out = <String, List<Track>>{};
+    final audius = _audius();
+    if (audius != null) {
+      try {
+        final trending = await audius.trendingTracks(limit: 12);
+        if (trending.isNotEmpty) out['Trending Now'] = trending;
+      } catch (_) {}
+    }
     final jobs = <Future<void>>[];
     for (final entry in queries.entries) {
       jobs.add(deezer
@@ -179,6 +193,13 @@ class MusicService {
   DeezerMusicProvider? _deezer() {
     for (final p in providers) {
       if (p is DeezerMusicProvider) return p;
+    }
+    return null;
+  }
+
+  AudiusMusicProvider? _audius() {
+    for (final p in providers) {
+      if (p is AudiusMusicProvider) return p;
     }
     return null;
   }

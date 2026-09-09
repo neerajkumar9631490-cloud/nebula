@@ -131,6 +131,22 @@ class _TrackTileState extends State<TrackTile> {
                 ],
               ),
             ),
+            if (t.source == 'audius')
+              Container(
+                margin: const EdgeInsets.only(right: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text('FULL',
+                    style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.accent,
+                        letterSpacing: 0.6)),
+              ),
             if (t.durationMs > 0)
               Text(formatTrackDuration(t.durationMs),
                   style: const TextStyle(

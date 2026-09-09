@@ -192,7 +192,7 @@ class _MusicHomeScreenState extends State<MusicHomeScreen> {
                           fontSize: 22,
                           fontWeight: FontWeight.w900,
                           color: AppTheme.text)),
-                  Text('30-second previews that play instantly',
+                  Text('Full tracks & instant previews',
                       style: TextStyle(
                           fontSize: 12, color: AppTheme.textDim)),
                 ],
