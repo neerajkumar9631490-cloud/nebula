@@ -6,15 +6,18 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/section_header.dart';
 import '../models/music_models.dart';
 import '../player/music_player_controller.dart';
-import '../services/music_provider.dart';
 import '../services/music_service.dart';
 import 'music_player_screen.dart';
+import '../widgets/browse_sheets.dart';
 import '../widgets/track_tile.dart';
 
 /// Music search with debounce: tracks, artists and albums in sections.
 /// Tapping a track plays it inside the full result queue.
 class MusicSearchScreen extends StatefulWidget {
-  const MusicSearchScreen({super.key});
+  /// When set, the screen searches this immediately (genre chips, …).
+  final String? initialQuery;
+
+  const MusicSearchScreen({super.key, this.initialQuery});
 
   @override
   State<MusicSearchScreen> createState() => _MusicSearchScreenState();
@@ -45,6 +48,19 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
     _controller.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final q = widget.initialQuery?.trim() ?? '';
+    if (q.isNotEmpty) {
+      _controller.text = q;
+      // Post-frame so the first build (suggestions) paints first.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _search(q);
+      });
+    }
   }
 
   void _onChanged(String query) {
@@ -89,14 +105,6 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const MusicPlayerScreen()),
-    );
-  }
-
-  Future<void> _artistTop(Artist artist) async {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (c) => _ArtistTopSheet(artist: artist),
     );
   }
 
@@ -341,7 +349,7 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Pressable(
-                onTap: () => _artistTop(a),
+                onTap: () => showArtistSheet(context, a),
                 child: Container(
                   padding: const EdgeInsets.all(9),
                   decoration: BoxDecoration(
@@ -409,10 +417,7 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Pressable(
-                onTap: () {
-                  _controller.text = a.title;
-                  _search(a.title);
-                },
+                onTap: () => showAlbumSheet(context, a),
                 child: Container(
                   padding: const EdgeInsets.all(9),
                   decoration: BoxDecoration(
@@ -478,95 +483,78 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
               ),
             ),
         ],
-      ],
-    );
-  }
-}
-
-/// Bottom sheet with an artist's top tracks (Deezer).
-class _ArtistTopSheet extends StatefulWidget {
-  final Artist artist;
-  const _ArtistTopSheet({required this.artist});
-
-  @override
-  State<_ArtistTopSheet> createState() => _ArtistTopSheetState();
-}
-
-class _ArtistTopSheetState extends State<_ArtistTopSheet> {
-  late Future<List<Track>> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future =
-        DeezerMusicProvider().artistTopTracks(widget.artist.id, limit: 10);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final player = MusicPlayerController();
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.7,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.artist.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.text)),
-              const Text('Top tracks',
-                  style:
-                      TextStyle(fontSize: 12, color: AppTheme.textDim)),
-              const SizedBox(height: 12),
-              Expanded(
-                child: FutureBuilder<List<Track>>(
-                  future: _future,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const Center(
-                          child: CircularProgressIndicator());
-                    }
-                    final tracks = snapshot.data ?? [];
-                    if (tracks.isEmpty) {
-                      return const Center(
-                        child: Text('No top tracks found.',
-                            style: TextStyle(
-                                color: AppTheme.textDim)),
-                      );
-                    }
-                    return ListView.separated(
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: tracks.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: 10),
-                      itemBuilder: (c, i) => TrackTile(
-                        track: tracks[i],
-                        onTap: () {
-                          player.playTracks(tracks, startIndex: i);
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    const MusicPlayerScreen()),
-                          );
-                        },
+        if (r.playlists.isNotEmpty) ...[
+          const SectionHeader(title: 'Playlists'),
+          for (final p in r.playlists)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Pressable(
+                onTap: () => showRemotePlaylistSheet(context, p),
+                child: Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.stroke),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          color: AppTheme.surface,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: p.artwork.isEmpty
+                              ? const Center(
+                                  child: Icon(
+                                      Icons.queue_music_rounded,
+                                      color: AppTheme.textDim,
+                                      size: 24),
+                                )
+                              : CachedNetworkImage(
+                                  imageUrl: p.artwork,
+                                  fit: BoxFit.cover,
+                                  memCacheWidth: 120,
+                                  fadeInDuration: AppTheme.fast,
+                                ),
+                        ),
                       ),
-                    );
-                  },
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(p.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.text)),
+                            Text(
+                                p.trackCount > 0
+                                    ? '${p.trackCount} tracks'
+                                    : 'Playlist',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.textDim)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded,
+                          color: AppTheme.textDim),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
+        ],
+      ],
     );
   }
 }

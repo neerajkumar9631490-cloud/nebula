@@ -130,6 +130,61 @@ class AudioSource {
   });
 }
 
+/// A playlist living on a provider (e.g. Deezer editorial/charts) —
+/// distinct from the local user [Playlist]. Opened read-only; tracks
+/// play straight from it.
+class RemotePlaylist {
+  final String id;
+  final String title;
+  final String artwork;
+  final String source;
+  final int trackCount;
+
+  const RemotePlaylist({
+    required this.id,
+    required this.title,
+    this.artwork = '',
+    required this.source,
+    this.trackCount = 0,
+  });
+}
+
+class MusicGenre {
+  final String id;
+  final String name;
+
+  const MusicGenre({required this.id, required this.name});
+}
+
+class ArtistDetails {
+  final Artist artist;
+  final List<Track> topTracks;
+  final List<Album> albums;
+  final List<Artist> related;
+
+  const ArtistDetails({
+    required this.artist,
+    this.topTracks = const [],
+    this.albums = const [],
+    this.related = const [],
+  });
+}
+
+class AlbumDetails {
+  final Album album;
+  final List<Track> tracks;
+
+  const AlbumDetails({required this.album, this.tracks = const []});
+}
+
+class RemotePlaylistDetails {
+  final RemotePlaylist playlist;
+  final List<Track> tracks;
+
+  const RemotePlaylistDetails(
+      {required this.playlist, this.tracks = const []});
+}
+
 /// One entry in the playback queue. Wraps a [Track] with a unique
 /// [queueId] so the same track can appear multiple times.
 class QueueItem {

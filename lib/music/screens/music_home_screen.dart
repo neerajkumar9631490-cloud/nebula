@@ -8,6 +8,7 @@ import '../player/music_player_controller.dart';
 import '../services/music_service.dart';
 import 'music_player_screen.dart';
 import 'music_search_screen.dart';
+import '../widgets/browse_sheets.dart';
 import '../widgets/playlist_sheet.dart';
 
 /// Music home: charts per provider, recently played, liked tracks
@@ -32,16 +33,22 @@ class _MusicHomeScreenState extends State<MusicHomeScreen> {
 
   Future<_HomeData> _load() async {
     final results = await Future.wait([
-      _service.browse().catchError((_) => <String, List<Track>>{}),
+      _service.featuredSections().catchError((_) => <String, List<Track>>{}),
+      _service.genres().catchError((_) => <MusicGenre>[]),
+      _service
+          .chartPlaylists(limit: 10)
+          .catchError((_) => <RemotePlaylist>[]),
       _controller.recentPlayed(limit: 12).catchError((_) => <Track>[]),
       _controller.likedTracks().catchError((_) => <String, Track>{}),
       _controller.playlists().catchError((_) => <Playlist>[]),
     ]);
     return _HomeData(
-      charts: results[0] as Map<String, List<Track>>,
-      recent: results[1] as List<Track>,
-      liked: (results[2] as Map<String, Track>).values.toList(),
-      playlists: results[3] as List<Playlist>,
+      featured: results[0] as Map<String, List<Track>>,
+      genres: results[1] as List<MusicGenre>,
+      curated: results[2] as List<RemotePlaylist>,
+      recent: results[3] as List<Track>,
+      liked: (results[4] as Map<String, Track>).values.toList(),
+      playlists: results[5] as List<Playlist>,
     );
   }
 
@@ -122,21 +129,31 @@ class _MusicHomeScreenState extends State<MusicHomeScreen> {
                   _cardRow(data.recent,
                       (t, i) => _playList(data.recent, i)),
                 ],
-                for (final entry in data.charts.entries) ...[
+                for (final entry in data.featured.entries) ...[
                   SectionHeader(
-                      title: 'Top right now',
-                      subtitle: 'Chart • ${entry.key}'),
+                      title: entry.key, subtitle: 'Curated for you'),
                   _cardRow(entry.value,
                       (t, i) => _playList(entry.value, i)),
+                ],
+                if (data.genres.isNotEmpty) ...[
+                  const SectionHeader(
+                      title: 'Genres', subtitle: 'Find your mood'),
+                  _genreRow(data.genres),
+                ],
+                if (data.curated.isNotEmpty) ...[
+                  const SectionHeader(
+                      title: 'Playlists to explore',
+                      subtitle: 'Curated collections'),
+                  _curatedRow(data.curated),
                 ],
                 const SectionHeader(
                     title: 'Your library', subtitle: 'Likes & playlists'),
                 _libraryRow(data),
-                if (data.recent.isEmpty && data.charts.isEmpty)
+                if (data.recent.isEmpty && data.featured.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(28),
                     child: Text(
-                        'Connect to the internet to browse charts.',
+                        'Connect to the internet to browse music.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: AppTheme.textDim)),
                   ),
@@ -256,6 +273,110 @@ class _MusicHomeScreenState extends State<MusicHomeScreen> {
     );
   }
 
+  Widget _genreRow(List<MusicGenre> genres) {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: genres.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (c, i) {
+          final g = genres[i];
+          return Pressable(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    MusicSearchScreen(initialQuery: '${g.name} hits'),
+              ),
+            ),
+            child: Container(
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.07),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppTheme.stroke),
+              ),
+              child: Text(g.name,
+                  style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.text)),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _curatedRow(List<RemotePlaylist> playlists) {
+    return SizedBox(
+      height: 178,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: playlists.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 13),
+        itemBuilder: (c, i) {
+          final p = playlists[i];
+          return Pressable(
+            onTap: () => showRemotePlaylistSheet(context, p),
+            child: SizedBox(
+              width: 128,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 128,
+                    height: 118,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: AppTheme.surface,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: p.artwork.isEmpty
+                          ? const Center(
+                              child: Icon(
+                                  Icons.queue_music_rounded,
+                                  color: AppTheme.textDim,
+                                  size: 30),
+                            )
+                          : CachedNetworkImage(
+                              imageUrl: p.artwork,
+                              fit: BoxFit.cover,
+                              memCacheWidth: 260,
+                              fadeInDuration: AppTheme.fast,
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(p.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.text)),
+                  Text(
+                      p.trackCount > 0
+                          ? '${p.trackCount} tracks'
+                          : 'Playlist',
+                      style: const TextStyle(
+                          fontSize: 11.5, color: AppTheme.textDim)),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _libraryRow(_HomeData data) {
     return SizedBox(
       height: 118,
@@ -348,13 +469,17 @@ class _MusicHomeScreenState extends State<MusicHomeScreen> {
 }
 
 class _HomeData {
-  final Map<String, List<Track>> charts;
+  final Map<String, List<Track>> featured;
+  final List<MusicGenre> genres;
+  final List<RemotePlaylist> curated;
   final List<Track> recent;
   final List<Track> liked;
   final List<Playlist> playlists;
 
   const _HomeData({
-    required this.charts,
+    required this.featured,
+    required this.genres,
+    required this.curated,
     required this.recent,
     required this.liked,
     required this.playlists,

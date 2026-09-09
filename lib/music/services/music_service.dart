@@ -6,15 +6,20 @@ class MusicSearchResult {
   final List<Track> tracks;
   final List<Artist> artists;
   final List<Album> albums;
+  final List<RemotePlaylist> playlists;
 
   const MusicSearchResult({
     this.tracks = const [],
     this.artists = const [],
     this.albums = const [],
+    this.playlists = const [],
   });
 
   bool get isEmpty =>
-      tracks.isEmpty && artists.isEmpty && albums.isEmpty;
+      tracks.isEmpty &&
+      artists.isEmpty &&
+      albums.isEmpty &&
+      playlists.isEmpty;
 }
 
 /// Aggregate facade over all [MusicProvider] backends. Runs providers
@@ -33,14 +38,18 @@ class MusicService {
     final trackJobs = <Future<List<Track>>>[];
     final artistJobs = <Future<List<Artist>>>[];
     final albumJobs = <Future<List<Album>>>[];
+    final playlistJobs = <Future<List<RemotePlaylist>>>[];
     for (final p in providers) {
       trackJobs.add(p.searchTracks(q).catchError((_) => <Track>[]));
       artistJobs.add(p.searchArtists(q).catchError((_) => <Artist>[]));
       albumJobs.add(p.searchAlbums(q).catchError((_) => <Album>[]));
+      playlistJobs
+          .add(p.searchPlaylists(q).catchError((_) => <RemotePlaylist>[]));
     }
     final trackLists = await Future.wait(trackJobs);
     final artistLists = await Future.wait(artistJobs);
     final albumLists = await Future.wait(albumJobs);
+    final playlistLists = await Future.wait(playlistJobs);
 
     final seenTracks = <String>{};
     final tracks = <Track>[];
@@ -65,8 +74,19 @@ class MusicService {
         if (albums.length >= 12) break;
       }
     }
+    final seenPlaylists = <String>{};
+    final playlists = <RemotePlaylist>[];
+    for (final list in playlistLists) {
+      for (final p in list) {
+        if (seenPlaylists.add(p.id)) playlists.add(p);
+        if (playlists.length >= 8) break;
+      }
+    }
     return MusicSearchResult(
-        tracks: tracks, artists: artists, albums: albums);
+        tracks: tracks,
+        artists: artists,
+        albums: albums,
+        playlists: playlists);
   }
 
   /// Browse rows for the music home screen (charts per provider).
@@ -79,6 +99,88 @@ class MusicService {
       } catch (_) {}
     }
     return out;
+  }
+
+  /// Featured genre/mood rows, mirroring curated home sections:
+  /// one named query per row, all resolved against the Deezer backend.
+  Future<Map<String, List<Track>>> featuredSections() async {
+    const queries = {
+      'Pop Essentials': 'Top Pop Hits',
+      'Hip-Hop Hits': 'Hip Hop Hits',
+      'Rock Essentials': 'Rock Essentials',
+      'Chill & Lofi': 'Lofi Beats Chill',
+    };
+    final deezer = _deezer();
+    if (deezer == null) return {};
+    final out = <String, List<Track>>{};
+    final jobs = <Future<void>>[];
+    for (final entry in queries.entries) {
+      jobs.add(deezer
+          .searchTracks(entry.value, limit: 12)
+          .then((tracks) {
+            if (tracks.isNotEmpty) out[entry.key] = tracks;
+          })
+          .catchError((_) {}));
+    }
+    await Future.wait(jobs);
+    return out;
+  }
+
+  Future<List<MusicGenre>> genres() async {
+    final deezer = _deezer();
+    if (deezer == null) return [];
+    try {
+      return await deezer.getGenres();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<RemotePlaylist>> chartPlaylists({int limit = 10}) async {
+    final deezer = _deezer();
+    if (deezer == null) return [];
+    try {
+      return await deezer.chartPlaylists(limit: limit);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<ArtistDetails?> artistDetails(String artistId) async {
+    for (final p in providers) {
+      try {
+        final details = await p.getArtistDetails(artistId);
+        if (details != null) return details;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  Future<AlbumDetails?> albumDetails(String albumId) async {
+    for (final p in providers) {
+      try {
+        final details = await p.getAlbumDetails(albumId);
+        if (details != null) return details;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  Future<RemotePlaylistDetails?> playlistDetails(String playlistId) async {
+    for (final p in providers) {
+      try {
+        final details = await p.getPlaylistDetails(playlistId);
+        if (details != null) return details;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  DeezerMusicProvider? _deezer() {
+    for (final p in providers) {
+      if (p is DeezerMusicProvider) return p;
+    }
+    return null;
   }
 
   /// Fresh metadata for a track (used before playback to survive
