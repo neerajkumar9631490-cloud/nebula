@@ -10,11 +10,20 @@ class CatalogSection {
   final String type; // Stremio type: 'movie' | 'series'
   final List<MediaItem> items;
 
+  /// Provenance for the See-All screen: refetch with option filters
+  /// (e.g. genre) and skip pagination straight from the plugin.
+  final String baseUrl;
+  final AddonCatalog catalog;
+  final String addonName;
+
   const CatalogSection({
     required this.title,
     required this.subtitle,
     required this.type,
     required this.items,
+    required this.baseUrl,
+    required this.catalog,
+    required this.addonName,
   });
 
   bool get isMovies => type == 'movie';
@@ -62,6 +71,9 @@ class CatalogService {
         subtitle: 'From ${addon.manifest.name}',
         type: isSeries ? 'series' : 'movie',
         items: items,
+        baseUrl: addon.baseUrl,
+        catalog: catalog,
+        addonName: addon.manifest.name,
       );
     } catch (_) {
       return null;

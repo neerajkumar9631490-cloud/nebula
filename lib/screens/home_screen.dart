@@ -41,8 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _seeAll(CatalogSection section) => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              SeeAllScreen(title: section.title, items: section.items),
+          builder: (_) => SeeAllScreen(section: section),
         ),
       );
 
