@@ -8,7 +8,7 @@ import '../player/music_player_controller.dart';
 import '../services/music_service.dart';
 import 'music_player_screen.dart';
 import 'music_search_screen.dart';
-import 'playlist_sheet.dart';
+import '../widgets/playlist_sheet.dart';
 
 /// Music home: charts per provider, recently played, liked tracks
 /// and local playlists. Tapping any card plays its list as a queue.

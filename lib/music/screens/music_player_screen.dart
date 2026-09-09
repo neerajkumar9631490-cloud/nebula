@@ -296,14 +296,14 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
     Color color = AppTheme.textDim;
     String badge = '';
     switch (s.repeat) {
-      case RepeatMode.off:
+      case MusicRepeatMode.off:
         icon = Icons.repeat_rounded;
         break;
-      case RepeatMode.all:
+      case MusicRepeatMode.all:
         icon = Icons.repeat_rounded;
         color = AppTheme.accent;
         break;
-      case RepeatMode.one:
+      case MusicRepeatMode.one:
         icon = Icons.repeat_one_rounded;
         color = AppTheme.accent;
         badge = '1';

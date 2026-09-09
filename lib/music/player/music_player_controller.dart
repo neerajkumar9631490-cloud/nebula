@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:media_kit/media_kit.dart';
+import 'package:media_kit/media_kit.dart' hide Track, Playlist;
 import '../models/music_models.dart';
 import '../services/audio_source_resolver.dart';
 import '../services/music_library_service.dart';
 import 'music_queue.dart';
 
-export 'music_queue.dart' show RepeatMode;
+export 'music_queue.dart' show MusicRepeatMode;
 
 enum MusicStatus {
   idle,
@@ -26,7 +26,7 @@ class MusicPlayerState {
   final QueueItem? current;
   final String? error;
   final bool shuffle;
-  final RepeatMode repeat;
+  final MusicRepeatMode repeat;
   final double volume; // 0..100
   final double rate;
   final int position; // queue position, -1 when none
@@ -37,7 +37,7 @@ class MusicPlayerState {
     this.current,
     this.error,
     this.shuffle = false,
-    this.repeat = RepeatMode.off,
+    this.repeat = MusicRepeatMode.off,
     this.volume = 100,
     this.rate = 1.0,
     this.position = -1,
@@ -73,7 +73,7 @@ class MusicPlayerController {
   final MusicLibraryService _library = MusicLibraryService();
 
   final ValueNotifier<MusicPlayerState> state =
-      const ValueNotifier(MusicPlayerState());
+      ValueNotifier(const MusicPlayerState());
   final StreamController<Duration> _position =
       StreamController<Duration>.broadcast();
   final StreamController<Duration?> _duration =
@@ -382,7 +382,7 @@ class MusicPlayerController {
     if (!done) return;
     final s = state.value.status;
     if (s != MusicStatus.playing && s != MusicStatus.paused) return;
-    if (queue.repeat == RepeatMode.one) {
+    if (queue.repeat == MusicRepeatMode.one) {
       _player.seek(Duration.zero);
       _player.play();
       return;

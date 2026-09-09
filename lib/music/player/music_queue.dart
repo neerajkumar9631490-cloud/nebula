@@ -1,6 +1,6 @@
 import '../models/music_models.dart';
 
-enum RepeatMode { off, all, one }
+enum MusicRepeatMode { off, all, one }
 
 /// Centralized playback queue — the ONLY queue in the music feature.
 /// All screens share it through [MusicPlayerController]; there are no
@@ -14,7 +14,7 @@ class MusicQueue {
   List<int> _order = [];
   int _pos = -1;
   bool shuffle = false;
-  RepeatMode repeat = RepeatMode.off;
+  MusicRepeatMode repeat = MusicRepeatMode.off;
 
   List<QueueItem> get items => List.unmodifiable(_items);
   int get length => _items.length;
@@ -128,7 +128,7 @@ class MusicQueue {
       _pos = position + 1;
       return current;
     }
-    if (repeat == RepeatMode.all) {
+    if (repeat == MusicRepeatMode.all) {
       _pos = 0;
       return current;
     }
@@ -155,11 +155,11 @@ class MusicQueue {
     if (_items.isNotEmpty) _normalize(keepId: current?.queueId);
   }
 
-  RepeatMode cycleRepeat() {
+  MusicRepeatMode cycleRepeat() {
     repeat = switch (repeat) {
-      RepeatMode.off => RepeatMode.all,
-      RepeatMode.all => RepeatMode.one,
-      RepeatMode.one => RepeatMode.off,
+      MusicRepeatMode.off => MusicRepeatMode.all,
+      MusicRepeatMode.all => MusicRepeatMode.one,
+      MusicRepeatMode.one => MusicRepeatMode.off,
     };
     return repeat;
   }
