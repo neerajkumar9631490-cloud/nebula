@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../models/stream_result.dart';
 import '../models/media_item.dart';
+import '../music/player/music_player_controller.dart';
 import '../core/bridge/host_bridge.dart';
 import '../core/runtime/app_runtime.dart';
 import '../core/streaming/stream_request.dart';
@@ -45,6 +46,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    // A video takes over the speakers: pause any music first.
+    MusicPlayerController().pause();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _player = Player(configuration: PlayerConfiguration(bufferSize: 32 * 1024 * 1024));
     _videoController = VideoController(_player);

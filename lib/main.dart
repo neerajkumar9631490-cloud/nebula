@@ -9,6 +9,8 @@ import 'screens/search_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/addons_screen.dart';
 import 'screens/settings_screen.dart';
+import 'music/screens/music_home_screen.dart';
+import 'music/widgets/mini_player.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -163,20 +165,26 @@ class _MainShellState extends State<MainShell> {
             HomeScreen(onSearchTap: () => setState(() => _tab = 1)),
             const SearchScreen(),
             const LibraryScreen(),
+            const MusicHomeScreen(),
             const AddonsScreen(),
             const SettingsScreen(),
           ],
         ),
       ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: AppTheme.stroke, width: 1)),
-        ),
-        child: NavigationBar(
-          selectedIndex: _tab,
-          onDestinationSelected: (i) => setState(() => _tab = i),
-          animationDuration: AppTheme.med,
-          destinations: const [
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const MiniPlayer(),
+          Container(
+            decoration: const BoxDecoration(
+              border:
+                  Border(top: BorderSide(color: AppTheme.stroke, width: 1)),
+            ),
+            child: NavigationBar(
+              selectedIndex: _tab,
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              animationDuration: AppTheme.med,
+              destinations: const [
             NavigationDestination(
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home_rounded),
@@ -193,6 +201,11 @@ class _MainShellState extends State<MainShell> {
               label: 'Library',
             ),
             NavigationDestination(
+              icon: Icon(Icons.music_note_outlined),
+              selectedIcon: Icon(Icons.music_note_rounded),
+              label: 'Music',
+            ),
+            NavigationDestination(
               icon: Icon(Icons.extension_outlined),
               selectedIcon: Icon(Icons.extension_rounded),
               label: 'Addons',
@@ -204,6 +217,8 @@ class _MainShellState extends State<MainShell> {
             ),
           ],
         ),
+      ),
+      ],
       ),
     );
   }
