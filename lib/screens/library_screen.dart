@@ -3,7 +3,8 @@ import '../models/media_item.dart';
 import '../services/watch_progress_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
-import 'sources_screen.dart';
+import '../widgets/source_picker.dart';
+import 'player_screen.dart';
 
 /// Library tab: everything you started watching, newest first,
 /// with one-tap resume straight into sources.
@@ -37,13 +38,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
       mediaType: e.mediaType,
       releaseYear: '',
     );
+    final result = await showSourcePicker(
+      context: context,
+      item: item,
+      season: e.season,
+      episode: e.episode,
+    );
+    if (result == null || !mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => SourcesScreen(
+        builder: (_) => PlayerScreen(
+          result: result,
+          title: e.isTv ? '${e.title} • S${e.season}E${e.episode}' : e.title,
           item: item,
-          season: e.season,
-          episode: e.episode,
+          season: e.isTv ? e.season : null,
+          episode: e.isTv ? e.episode : null,
         ),
       ),
     );

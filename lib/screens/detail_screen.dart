@@ -9,8 +9,9 @@ import '../services/watch_progress_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/poster_card.dart';
+import '../widgets/source_picker.dart';
 import 'addons_screen.dart';
-import 'sources_screen.dart';
+import 'player_screen.dart';
 
 /// Detail screen in the reference style: inline preview player, title +
 /// Info sheet, meta strip, action pills, Resources with season dropdown
@@ -187,14 +188,27 @@ class _DetailScreenState extends State<DetailScreen> {
 
   bool get _isTv => widget.item.mediaType == 'tv';
 
-  void _openSources() {
+  /// Source choice happens in-place (bottom sheet) instead of a
+  /// separate results page — pick, then play straight away.
+  Future<void> _openSources() async {
+    final result = await showSourcePicker(
+      context: context,
+      item: widget.item,
+      season: _selectedSeason,
+      episode: _selectedEpisode,
+    );
+    if (result == null || !mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => SourcesScreen(
+        builder: (_) => PlayerScreen(
+          result: result,
+          title: _isTv
+              ? '${widget.item.title} • S$_selectedSeason E$_selectedEpisode'
+              : widget.item.title,
           item: widget.item,
-          season: _selectedSeason,
-          episode: _selectedEpisode,
+          season: _isTv ? _selectedSeason : null,
+          episode: _isTv ? _selectedEpisode : null,
         ),
       ),
     ).then((_) => _loadProgress());
@@ -807,7 +821,8 @@ class _DetailScreenState extends State<DetailScreen> {
             separatorBuilder: (_, __) => const SizedBox(width: 10),
             itemBuilder: (c, i) {
               if (!_isTv) {
-                return _episodeChip('Full Movie', true, _openSources);
+                return _episodeChip('Full Movie', true, _openSources,
+                    wide: true);
               }
               if (i == 0) {
                 return _episodeChip('All', false, _openSources);
@@ -823,11 +838,17 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
-  Widget _episodeChip(String label, bool selected, VoidCallback onTap) {
+  Widget _episodeChip(String label, bool selected, VoidCallback onTap,
+      {bool wide = false}) {
     return Pressable(
       onTap: onTap,
       child: Container(
-        width: 72,
+        // Number chips keep the fixed square; word labels (Full Movie)
+        // size to their text with comfortable padding — never wrapped.
+        width: wide ? null : 72,
+        padding: wide
+            ? const EdgeInsets.symmetric(horizontal: 22)
+            : null,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           gradient: selected ? AppTheme.accentGradient : null,
@@ -835,6 +856,7 @@ class _DetailScreenState extends State<DetailScreen> {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(label,
+            softWrap: false,
             style: TextStyle(
                 color: selected
                     ? AppTheme.onAccent
@@ -964,23 +986,34 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Widget _commentsEmpty() {
+    // Optically centered in the remaining viewport so the block never
+    // clings to the tab divider with dead space below it.
     return const Padding(
       padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
-      child: Column(
-        children: [
-          Icon(Icons.chat_bubble_outline_rounded,
-              size: 40, color: AppTheme.textFaint),
-          SizedBox(height: 10),
-          Text('No comments yet',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.text,
-                  fontSize: 15)),
-          SizedBox(height: 4),
-          Text('Be the first to share your thoughts.',
-              style: TextStyle(
-                  color: AppTheme.textDim, fontSize: 13)),
-        ],
+      child: SizedBox(
+        height: 300,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(Icons.chat_bubble_outline_rounded,
+                  size: 40, color: AppTheme.textFaint),
+              SizedBox(height: 10),
+              Text('No comments yet',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.text,
+                      fontSize: 15)),
+              SizedBox(height: 4),
+              Text('Be the first to share your thoughts.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: AppTheme.textDim, fontSize: 13)),
+            ],
+          ),
+        ),
       ),
     );
   }
