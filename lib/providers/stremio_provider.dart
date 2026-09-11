@@ -4,6 +4,7 @@ import '../models/stream_result.dart';
 import '../services/stremio/addon_cache.dart';
 import '../services/stremio/addon_client.dart';
 import '../services/stremio/catalog_service.dart';
+import '../services/stremio/stream_verifier.dart';
 
 /// [StreamProvider] backed by the user's installed Stremio addons.
 ///
@@ -86,12 +87,12 @@ class StremioStreamProvider implements StreamProvider {
       notices.addAll(r.notices);
       streams.addAll(r.streams);
     }
-    // Healthiest torrents first (by advertised seeders), everything
-    // else keeps the legacy label order — so the BEST badges land on
-    // the fastest sources instead of arbitrary ones.
-    streams.sort(_compareStreams);
-    if (streams.isNotEmpty) _cache.storeStreams(key, streams);
-    return ProviderResult(streams: streams, notices: notices);
+    // Dead HTTPS links are probed out automatically and the rest is
+    // ordered HTTPS-first, torrents-last (seeders break torrent ties).
+    final ordered =
+        await StreamVerifier.instance.verifyAndOrder(streams);
+    if (ordered.isNotEmpty) _cache.storeStreams(key, ordered);
+    return ProviderResult(streams: ordered, notices: notices);
   }
 
   /// Fire-and-forget warm-up: call when a detail screen opens so the
@@ -118,31 +119,6 @@ class StremioStreamProvider implements StreamProvider {
         StreamDiscoveryQuery(item: item, season: season, episode: episode),
       ).timeout(const Duration(seconds: 12));
     } catch (_) {}
-  }
-
-  /// Seeders advertised in a source label ('👤 42', '12 seeders',
-  /// 'S: 8', '[5 seed]'). Returns -1 when the label says nothing.
-  static int parseSeeders(String label) {
-    const patterns = [
-      '👤\\s*(\\d+)',
-      '(\\d+)\\s*seeders?',
-      '\\bS\\s*:\\s*(\\d+)',
-      '\\[(\\d+)\\s*[Ss]eed',
-    ];
-    for (final p in patterns) {
-      final m = RegExp(p, caseSensitive: false).firstMatch(label);
-      if (m != null) return int.tryParse(m.group(1)!) ?? -1;
-    }
-    return -1;
-  }
-
-  static int _compareStreams(StreamResult a, StreamResult b) {
-    if (a.kind == StreamKind.torrent && b.kind == StreamKind.torrent) {
-      final bySeeds =
-          parseSeeders(b.label).compareTo(parseSeeders(a.label));
-      if (bySeeds != 0) return bySeeds;
-    }
-    return b.label.compareTo(a.label);
   }
 
   Future<ProviderResult> _queryOne({
