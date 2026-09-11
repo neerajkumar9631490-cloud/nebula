@@ -14,7 +14,7 @@ class RankBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         boxShadow: const [
           BoxShadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 2)),
         ],
@@ -36,7 +36,7 @@ class TypeBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.62),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.white.withOpacity(0.18)),
       ),
       child: Text(label,
@@ -56,7 +56,7 @@ class RatingBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.62),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.white.withOpacity(0.14)),
       ),
       child: Row(

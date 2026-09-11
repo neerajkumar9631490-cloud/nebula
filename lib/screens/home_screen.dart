@@ -156,19 +156,28 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _sectionHead(CatalogSection s) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 22, 8, 12),
+      padding: const EdgeInsets.fromLTRB(20, 24, 8, 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
-            child: Text(s.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.text,
-                    letterSpacing: -0.2)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(s.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.sectionTitle),
+                const SizedBox(height: 3),
+                Text(s.subtitle.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.eyebrow),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
           TextButton(
             onPressed: () => _seeAll(s),
             style: TextButton.styleFrom(

@@ -73,11 +73,16 @@ class AppTheme {
   static const double rXl = 28;
 
   static List<BoxShadow> get cardShadow => const [
-        BoxShadow(color: Color(0x66000000), blurRadius: 18, offset: Offset(0, 8)),
+        BoxShadow(color: Color(0x59000000), blurRadius: 16, offset: Offset(0, 6)),
       ];
 
   static List<BoxShadow> get glowShadow => const [
-        BoxShadow(color: Color(0x552FD97C), blurRadius: 24, offset: Offset(0, 8)),
+        BoxShadow(color: Color(0x332FD97C), blurRadius: 16, offset: Offset(0, 6)),
+      ];
+
+  /// Soft resting shadow for elevated sheets and dialogs.
+  static List<BoxShadow> get sheetShadow => const [
+        BoxShadow(color: Color(0x66000000), blurRadius: 28, offset: Offset(0, 12)),
       ];
 
   static const Duration fast = Duration(milliseconds: 160);
@@ -86,14 +91,26 @@ class AppTheme {
   static const Curve curve = Curves.easeOutCubic;
 
   // ── Text ─────────────────────────────────────────────────
+  // One voice: tight display titles, tracked eyebrow labels, quiet body.
+  // (Premium rails — Max/Disney/Spotify — all separate the "label voice"
+  // from running text with positive tracking on small caps.)
   static const TextStyle display = TextStyle(
-    color: text, fontSize: 28, fontWeight: FontWeight.w800, height: 1.15, letterSpacing: -0.3,
+    color: text, fontSize: 28, fontWeight: FontWeight.w700, height: 1.15, letterSpacing: -0.3,
   );
   static const TextStyle title = TextStyle(
-    color: text, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.2,
+    color: text, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.2,
+  );
+  static const TextStyle sectionTitle = TextStyle(
+    color: text, fontSize: 19, fontWeight: FontWeight.w700, letterSpacing: -0.2, height: 1.25,
   );
   static const TextStyle subtitle = TextStyle(
     color: textDim, fontSize: 13.5, fontWeight: FontWeight.w500, height: 1.5,
+  );
+  static const TextStyle body = TextStyle(
+    color: text, fontSize: 14, fontWeight: FontWeight.w400, height: 1.55,
+  );
+  static const TextStyle eyebrow = TextStyle(
+    color: textFaint, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.5, height: 1.4,
   );
   static const TextStyle caption = TextStyle(
     color: textFaint, fontSize: 12, fontWeight: FontWeight.w500,
@@ -129,14 +146,15 @@ class AppTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: TextStyle(
-            color: text, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+            color: text, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.2),
         iconTheme: IconThemeData(color: text),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: const Color(0xF0111117),
         indicatorColor: accent.withOpacity(0.18),
         labelTextStyle: WidgetStateProperty.all(
-          const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+          const TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.4),
         ),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -210,11 +228,19 @@ class AppTheme {
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
-      iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          foregroundColor: text,
-          backgroundColor: const Color(0x1AFFFFFF),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      iconButtonTheme: const IconButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStatePropertyAll(text),
+          // Plain icons, no boxes: tinted containers are drawn by hand
+          // only where a tappable tile is wanted (premium rails never
+          // box every icon on screen).
+          backgroundColor: WidgetStatePropertyAll(Colors.transparent),
+          overlayColor:
+              WidgetStatePropertyAll(Color(0x14FFFFFF)),
+          padding: WidgetStatePropertyAll(
+              EdgeInsets.all(8)),
+          minimumSize:
+              WidgetStatePropertyAll(Size(40, 40)),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(

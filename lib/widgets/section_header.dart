@@ -26,13 +26,20 @@ class SectionHeader extends StatelessWidget {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(title,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.text)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.sectionTitle),
                 if (subtitle != null)
-                  Text(subtitle!,
-                      style: const TextStyle(fontSize: 12, color: AppTheme.textFaint)),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text(subtitle!.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.eyebrow),
+                  ),
               ],
             ),
           ),

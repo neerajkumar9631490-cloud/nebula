@@ -545,7 +545,7 @@ class _DetailScreenState extends State<DetailScreen> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                   fontSize: 24,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: AppTheme.text,
                   letterSpacing: -0.3),
             ),
