@@ -7,13 +7,14 @@ import 'streaming/torrserver_backend.dart';
 import 'services/stremio/addon_manager.dart';
 import 'screens/home_screen.dart';
 import 'screens/search_screen.dart';
-import 'screens/library_screen.dart';
+import 'screens/downloads_screen.dart';
 import 'screens/addons_screen.dart';
 import 'screens/settings_screen.dart';
 import 'music/screens/music_home_screen.dart';
 import 'music/services/lossless_audio_service.dart';
 import 'music/services/music_download_service.dart';
 import 'music/services/music_settings.dart';
+import 'services/downloads/video_download_service.dart';
 import 'music/widgets/mini_player.dart';
 
 void main() {
@@ -48,6 +49,7 @@ class _MyAppState extends State<MyApp> {
     unawaited(MusicSettings.instance.ensureLoaded());
     unawaited(LosslessAudioService.instance.initialize());
     unawaited(MusicDownloadService.instance.init());
+    unawaited(VideoDownloadService.instance.init());
     unawaited(TorrServerBackend().ensureReady());
     await AddonManager.ensureSeeded();
     if (!mounted) return;
@@ -170,7 +172,7 @@ class _MainShellState extends State<MainShell> {
         case 1:
           return const SearchScreen();
         case 2:
-          return const LibraryScreen();
+          return const DownloadsScreen();
         case 3:
           return const MusicHomeScreen();
         case 4:
@@ -222,9 +224,9 @@ class _MainShellState extends State<MainShell> {
               label: 'Discover',
             ),
             NavigationDestination(
-              icon: Icon(Icons.video_library_outlined),
-              selectedIcon: Icon(Icons.video_library_rounded),
-              label: 'Library',
+              icon: Icon(Icons.download_outlined),
+              selectedIcon: Icon(Icons.download_rounded),
+              label: 'Downloads',
             ),
             NavigationDestination(
               icon: Icon(Icons.music_note_outlined),

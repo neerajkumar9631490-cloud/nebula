@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../models/music_models.dart';
 import '../player/music_player_controller.dart';
+import '../services/music_download_service.dart';
 import '../services/music_settings.dart';
 import '../widgets/queue_sheet.dart';
 import '../widgets/track_tile.dart';
@@ -105,6 +106,32 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
                                 color: AppTheme.textDim)),
                       ],
                     ),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      final t = track;
+                      if (t == null) return;
+                      final svc = MusicDownloadService.instance;
+                      final msg = svc.isDownloaded(t.id) || svc.isQueued(t.id)
+                          ? 'Already downloaded or queued.'
+                          : 'Downloading “${t.title}” — see the Downloads tab.';
+                      if (!svc.isDownloaded(t.id) && !svc.isQueued(t.id)) {
+                        svc.queueTrack(t);
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(msg),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.download_rounded,
+                      color: AppTheme.textDim,
+                      size: 26,
+                    ),
+                    tooltip: 'Download for offline',
                   ),
                   IconButton(
                     onPressed: () async {

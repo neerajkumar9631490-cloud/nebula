@@ -13,6 +13,7 @@ import '../core/streaming/stream_request.dart';
 import '../providers/stremio_provider.dart';
 import '../streaming/torrserver_backend.dart';
 import '../services/watch_progress_service.dart';
+import '../services/downloads/video_download_service.dart';
 import '../theme/app_theme.dart';
 
 class PlayerScreen extends StatefulWidget {
@@ -142,6 +143,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _scheduleHide() { _hideTimer?.cancel(); _hideTimer = Timer(const Duration(seconds: 4), () { if (mounted) setState(() => _controlsVisible = false); }); }
   void _toggleControls() { setState(() => _controlsVisible = !_controlsVisible); if (_controlsVisible) _scheduleHide(); }
+
+  /// Queues the currently playing source for offline download and
+  /// confirms via snackbar. Torrents download through the engine;
+  /// HLS/external sources are rejected with a reason.
+  void _downloadCurrent() {
+    final outcome = VideoDownloadService.instance.queueDownload(
+      item: widget.item,
+      result: widget.result,
+      season: widget.season ?? 1,
+      episode: widget.episode ?? 1,
+    );
+    if (!mounted) return;
+    final message = switch (outcome) {
+      'queued' => 'Downloading “${widget.title}” — see the Downloads tab.',
+      'already' => 'Already downloaded or queued.',
+      _ => outcome,
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
   void _tapSeek(bool forward) {
     _seekBy(forward ? 10 : -10);
     if (!_controlsVisible) setState(() => _controlsVisible = true);
@@ -324,6 +350,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           const SizedBox(width: 4),
                           _roundBtn(Icons.forward_10_rounded, () => _seekBy(10)),
                           const Spacer(),
+                          _roundBtn(Icons.download_rounded, _downloadCurrent),
                           if (_isTorrent)
                             ValueListenableBuilder<EngineStats?>(
                                 valueListenable: _rt.engineStats,

@@ -267,4 +267,15 @@ class TorrentService {
       _active.remove(h);
     }
   }
+
+  /// Drops one torrent without touching the others (used after an
+  /// offline download finishes so playback streams keep running).
+  Future<void> dropTorrent(String magnetOrHash) async {
+    final hash =
+        _extractHash(magnetOrHash) ?? magnetOrHash.toLowerCase();
+    try {
+      if (_controller.isRunning) await _controller.dropTorrent(hash);
+    } catch (_) {}
+    _active.remove(hash);
+  }
 }
