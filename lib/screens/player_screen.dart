@@ -113,12 +113,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final progress = widget.item.mediaType == 'tv' ? await _wp.loadEpisode(widget.item.id, widget.season ?? 1, widget.episode ?? 1) : await _wp.loadMovie(widget.item.id);
     if (progress != null && progress.isResumable && mounted) {
       final r = Duration(milliseconds: progress.positionMs);
-      if (_duration.inMilliseconds > 0) {
-        _player.seek(r);
-      } else {
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted && _duration.inMilliseconds > 0) _player.seek(r);
+      // The old code slept a fixed 600ms when duration was unknown,
+      // delaying every resume. Poll instead and seek the moment the
+      // player knows the duration (usually <150ms).
+      for (var i = 0; i < 20; i++) {
+        if (!mounted) return;
+        if (_duration.inMilliseconds > 0) break;
+        await Future.delayed(const Duration(milliseconds: 150));
       }
+      if (mounted && _duration.inMilliseconds > 0) _player.seek(r);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

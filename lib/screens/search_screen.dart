@@ -76,7 +76,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _loadHot() async {
     try {
-      final sections = await _catalogs.loadSections(catalogsPerType: 1);
+      final sections = await _catalogs.loadSectionsCached(
+          catalogsPerType: 1);
       if (!mounted) return;
       final movies = sections.where((s) => s.isMovies).toList();
       final pick = movies.isNotEmpty
@@ -89,7 +90,7 @@ class _SearchScreenState extends State<SearchScreen> {
   void _onChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(
-        const Duration(milliseconds: 450), () => _search(query, save: false));
+        const Duration(milliseconds: 300), () => _search(query, save: false));
   }
 
   Future<void> _search(String query, {bool save = true}) async {

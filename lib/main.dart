@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'theme/app_theme.dart';
@@ -39,17 +40,16 @@ class _MyAppState extends State<MyApp> {
     _init();
   }
 
-  /// Seeds the built-in catalog plugin on first launch so categories,
-  /// search and artwork work instantly — no API key, no setup screen.
+  /// Seeds the built-in catalog plugin, then shows the app immediately.
+  /// Everything else (music prefs, lossless session, download index,
+  /// torrent engine) warms up in the background — the old code gated
+  /// the whole UI on a 650ms delay plus the slowest of those inits.
   Future<void> _init() async {
-    await Future.wait([
-      AddonManager.ensureSeeded(),
-      MusicSettings.instance.ensureLoaded(),
-      LosslessAudioService.instance.initialize(),
-      MusicDownloadService.instance.init(),
-      // Small staged delay so the splash feels intentional, not flickery.
-      Future.delayed(const Duration(milliseconds: 650)),
-    ]);
+    unawaited(MusicSettings.instance.ensureLoaded());
+    unawaited(LosslessAudioService.instance.initialize());
+    unawaited(MusicDownloadService.instance.init());
+    unawaited(TorrServerBackend().ensureReady());
+    await AddonManager.ensureSeeded();
     if (!mounted) return;
     setState(() => _loading = false);
   }
@@ -157,25 +157,45 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
 
+  /// Tabs build on first visit and stay alive after — the old code
+  /// constructed all six screens (home, search-hot, library, music,
+  /// addons, settings) on startup, firing every network load at once.
+  final Map<int, Widget> _built = {};
+
+  Widget _body(int index, VoidCallback onSearchTap) {
+    return _built.putIfAbsent(index, () {
+      switch (index) {
+        case 0:
+          return HomeScreen(onSearchTap: onSearchTap);
+        case 1:
+          return const SearchScreen();
+        case 2:
+          return const LibraryScreen();
+        case 3:
+          return const MusicHomeScreen();
+        case 4:
+          return const AddonsScreen();
+        case 5:
+          return const SettingsScreen();
+        default:
+          return const SizedBox.shrink();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    void goSearch() => setState(() => _tab = 1);
     return Scaffold(
       extendBody: true,
-      body: AnimatedSwitcher(
-        duration: AppTheme.fast,
-        switchInCurve: AppTheme.curve,
-        child: IndexedStack(
-          key: ValueKey(_tab),
-          index: _tab,
-          children: [
-            HomeScreen(onSearchTap: () => setState(() => _tab = 1)),
-            const SearchScreen(),
-            const LibraryScreen(),
-            const MusicHomeScreen(),
-            const AddonsScreen(),
-            const SettingsScreen(),
-          ],
-        ),
+      body: IndexedStack(
+        index: _tab,
+        children: [
+          for (var i = 0; i < 6; i++)
+            (i == _tab || _built.containsKey(i))
+                ? _body(i, goSearch)
+                : const SizedBox.shrink(),
+        ],
       ),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,

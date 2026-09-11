@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/media_item.dart';
+import '../providers/stremio_provider.dart';
 import '../services/stremio/catalog_service.dart';
 import '../services/watch_progress_service.dart';
+import '../streaming/torrserver_backend.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/poster_card.dart';
@@ -47,6 +49,16 @@ class _DetailScreenState extends State<DetailScreen> {
     _loadMeta();
     _recsFuture = _loadRecs();
     _loadListed();
+    // Warm the two slow things before the user taps Watch: stream
+    // discovery (so the picker finds a hot cache) and the torrent
+    // engine (so torrents skip process startup).
+    StremioStreamProvider().prefetch(
+      widget.item.id,
+      widget.item.mediaType,
+      season: _selectedSeason,
+      episode: _selectedEpisode,
+    );
+    TorrServerBackend().ensureReady();
   }
 
   Future<void> _loadProgress() async {
@@ -94,7 +106,10 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Future<List<MediaItem>> _loadRecs() async {
     try {
-      final sections = await _catalogs.loadSections(catalogsPerType: 1);
+      // Served from the home screen's section cache when fresh — the
+      // old code refetched every catalog from the network per detail.
+      final sections = await _catalogs.loadSectionsCached(
+          catalogsPerType: 1);
       final out = <MediaItem>[];
       for (final s in sections) {
         for (final m in s.items) {

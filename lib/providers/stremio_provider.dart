@@ -1,7 +1,8 @@
 import '../core/providers/stream_provider.dart';
+import '../models/media_item.dart';
 import '../models/stream_result.dart';
+import '../services/stremio/addon_cache.dart';
 import '../services/stremio/addon_client.dart';
-import '../services/stremio/addon_manager.dart';
 import '../services/stremio/catalog_service.dart';
 
 /// [StreamProvider] backed by the user's installed Stremio addons.
@@ -9,8 +10,19 @@ import '../services/stremio/catalog_service.dart';
 /// All Stremio-protocol details (manifests, id prefixes, stream paths)
 /// live here. Core and UI only see [StreamDiscoveryQuery] in and
 /// [ProviderResult] out, so swapping or adding providers never ripples.
+///
+/// Speed design: manifests come from [AddonCache] (no refetch per
+/// open), every addon is queried in parallel under a total time
+/// budget, and results are cached for 90s so reopening the picker
+/// is instant.
 class StremioStreamProvider implements StreamProvider {
   final AddonClient _client = AddonClient();
+  final AddonCache _cache = AddonCache.instance;
+
+  /// Hard budget for a full discovery round. Slow addons are cut off
+  /// instead of gating the whole sheet — partial fast results beat
+  /// complete slow ones.
+  static const discoveryBudget = Duration(seconds: 8);
 
   @override
   String get name => 'Stremio add-ons';
@@ -32,28 +44,45 @@ class StremioStreamProvider implements StreamProvider {
       else
         'Catalog id = $rawId (direct)',
     ];
-    final streams = <StreamResult>[];
-
-    final urls = await AddonManager.getManifestUrls();
-    if (urls.isEmpty) {
-      notices.add('No add-ons installed yet.');
-      return ProviderResult(streams: streams, notices: notices);
-    }
 
     final stremioType = CatalogService.stremioType(query.item.mediaType);
+    final key = AddonCache.streamKey(
+        rawId, stremioType, query.season, query.episode);
+    final cached = _cache.freshStreams(key);
+    if (cached != null && cached.isNotEmpty) {
+      return ProviderResult(streams: cached, notices: [...notices, 'Cached']);
+    }
+
+    final manifests = await _cache.manifests();
+    if (manifests.isEmpty) {
+      notices.add('No add-ons installed yet.');
+      return ProviderResult(streams: const [], notices: notices);
+    }
+
     final jobs = <Future<ProviderResult>>[];
-    for (final url in urls) {
+    for (final m in manifests) {
       jobs.add(_queryOne(
-        url: url,
+        manifest: m.manifest,
+        baseUrl: m.baseUrl,
         stremioType: stremioType,
         imdbId: imdbId,
         tmdbId: tmdbId,
         fallbackId: rawId,
         season: query.season,
         episode: query.episode,
-      ));
+      ).timeout(discoveryBudget, onTimeout: () => const ProviderResult()));
     }
-    for (final r in await Future.wait(jobs)) {
+    List<ProviderResult> results;
+    try {
+      results = await Future.wait(jobs).timeout(
+        discoveryBudget + const Duration(seconds: 2),
+        onTimeout: () => <ProviderResult>[],
+      );
+    } catch (_) {
+      results = [];
+    }
+    final streams = <StreamResult>[];
+    for (final r in results) {
       notices.addAll(r.notices);
       streams.addAll(r.streams);
     }
@@ -61,7 +90,34 @@ class StremioStreamProvider implements StreamProvider {
     // else keeps the legacy label order — so the BEST badges land on
     // the fastest sources instead of arbitrary ones.
     streams.sort(_compareStreams);
+    if (streams.isNotEmpty) _cache.storeStreams(key, streams);
     return ProviderResult(streams: streams, notices: notices);
+  }
+
+  /// Fire-and-forget warm-up: call when a detail screen opens so the
+  /// source picker usually finds a hot cache and paints instantly.
+  Future<void> prefetch(
+    String rawId,
+    String mediaType, {
+    int season = 1,
+    int episode = 1,
+  }) async {
+    try {
+      final stremioType = CatalogService.stremioType(mediaType);
+      final key =
+          AddonCache.streamKey(rawId, stremioType, season, episode);
+      if (_cache.freshStreams(key) != null) return;
+      final item = MediaItem(
+        id: rawId,
+        title: '',
+        overview: '',
+        mediaType: mediaType,
+        releaseYear: '',
+      );
+      await fetchStreams(
+        StreamDiscoveryQuery(item: item, season: season, episode: episode),
+      ).timeout(const Duration(seconds: 12));
+    } catch (_) {}
   }
 
   /// Seeders advertised in a source label ('👤 42', '12 seeders',
@@ -90,7 +146,8 @@ class StremioStreamProvider implements StreamProvider {
   }
 
   Future<ProviderResult> _queryOne({
-    required String url,
+    required AddonManifest manifest,
+    required String baseUrl,
     required String stremioType,
     required String imdbId,
     required String tmdbId,
@@ -98,9 +155,7 @@ class StremioStreamProvider implements StreamProvider {
     required int season,
     required int episode,
   }) async {
-    final base = AddonManager.baseUrlFromManifestUrl(url);
     try {
-      final manifest = await _client.fetchManifest(url);
       if (!manifest.supportsStream) {
         return ProviderResult(
             notices: ['${manifest.name}: no stream resource']);
@@ -111,7 +166,7 @@ class StremioStreamProvider implements StreamProvider {
             notices: ['${manifest.name}: skips $stremioType']);
       }
       final streams = await _client.queryStreams(
-        baseUrl: base,
+        baseUrl: baseUrl,
         addonName: manifest.name,
         mediaType: stremioType,
         imdbId: imdbId,
@@ -120,11 +175,12 @@ class StremioStreamProvider implements StreamProvider {
         season: season,
         episode: episode,
         fallbackId: fallbackId,
+        client: _cache.client,
       );
       return ProviderResult(
           streams: streams, notices: ['${manifest.name}: ${streams.length} found']);
     } catch (_) {
-      return ProviderResult(notices: ['$base: unreachable']);
+      return ProviderResult(notices: ['$baseUrl: unreachable']);
     }
   }
 }

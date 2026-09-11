@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
+import '../services/stremio/addon_cache.dart';
 import '../services/stremio/addon_client.dart';
 import '../services/stremio/catalog_service.dart';
 import '../theme/app_theme.dart';
@@ -79,12 +80,15 @@ class _SeeAllScreenState extends State<SeeAllScreen> {
         ..._selected,
         if (!reset && _skipSupported) 'skip': '${_items.length}',
       };
-      final batch = await _client.fetchCatalog(
-        baseUrl: widget.section.baseUrl,
-        type: widget.section.catalog.type,
-        catalogId: widget.section.catalog.id,
-        extra: params,
-      );
+      final batch = await _client
+          .fetchCatalog(
+            baseUrl: widget.section.baseUrl,
+            type: widget.section.catalog.type,
+            catalogId: widget.section.catalog.id,
+            extra: params,
+            client: AddonCache.instance.client,
+          )
+          .timeout(const Duration(seconds: 10));
       if (!mounted || gen != _gen) return;
       setState(() {
         if (reset) {

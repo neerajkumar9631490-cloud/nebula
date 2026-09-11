@@ -1,6 +1,8 @@
 import '../../models/media_item.dart';
+import 'addon_cache.dart';
 import 'addon_client.dart';
-import 'addon_manager.dart';
+
+export 'addon_client.dart' show AddonCatalog, AddonCatalogExtra, AddonManifest;
 
 /// A titled row of titles sourced from a plugin catalog,
 /// e.g. "Top Movies" from Cinemeta.
@@ -31,38 +33,31 @@ class CatalogSection {
 
 /// Reads movie/series categories, search and meta details from the
 /// user's installed catalog plugins. No API key required.
+///
+/// Speed design: manifests and sections are served from [AddonCache].
+/// The first load fetches everything in parallel; repeat visits paint
+/// instantly from cache while a background refresh keeps rows fresh.
 class CatalogService {
   final AddonClient _client = AddonClient();
+  final AddonCache _cache = AddonCache.instance;
 
   static String stremioType(String mediaType) =>
       mediaType == 'tv' ? 'series' : 'movie';
 
-  Future<List<_LoadedAddon>> _loadAddons() async {
-    final urls = await AddonManager.getManifestUrls();
-    final out = <_LoadedAddon>[];
-    for (final url in urls) {
-      try {
-        final manifest = await _client.fetchManifest(url);
-        out.add(_LoadedAddon(
-            AddonManager.baseUrlFromManifestUrl(url), manifest));
-      } catch (_) {
-        // Unreachable plugins are skipped; the rest still load.
-      }
-    }
-    return out;
-  }
-
   Future<CatalogSection?> _safeSection(
-      _LoadedAddon addon, AddonCatalog catalog) async {
+      LoadedManifest addon, AddonCatalog catalog) async {
     try {
-      final items = await _client.fetchCatalog(
-        baseUrl: addon.baseUrl,
-        type: catalog.type,
-        catalogId: catalog.id,
-        // Catalogs with required filters (e.g. genre) reject bare
-        // requests — satisfy them with the manifest's first options.
-        extra: catalog.requiredDefaults,
-      );
+      final items = await _client
+          .fetchCatalog(
+            baseUrl: addon.baseUrl,
+            type: catalog.type,
+            catalogId: catalog.id,
+            // Catalogs with required filters (e.g. genre) reject bare
+            // requests — satisfy them with the manifest's first options.
+            extra: catalog.requiredDefaults,
+            client: _cache.client,
+          )
+          .timeout(const Duration(seconds: 10));
       if (items.isEmpty) return null;
       final isSeries = catalog.type != 'movie';
       final label = isSeries ? 'TV Shows' : 'Movies';
@@ -82,34 +77,115 @@ class CatalogService {
 
   /// Every category from every catalog plugin, in install order
   /// (movies, then series, then any other catalog types the
-  /// plugin advertises, e.g. anime).
+  /// plugin advertises, e.g. anime). All addons load in parallel and
+  /// each catalog row inside an addon loads in parallel too.
   Future<List<CatalogSection>> loadSections({int catalogsPerType = 3}) async {
-    final addons = await _loadAddons();
-    final sections = <CatalogSection>[];
-    for (final addon in addons) {
-      if (!addon.manifest.supportsCatalog ||
-          addon.manifest.catalogs.isEmpty) {
-        continue;
-      }
-      final usable = addon.manifest.catalogs
-          .where((c) => c.type.isNotEmpty && c.id.isNotEmpty)
-          .toList();
-      final movies =
-          usable.where((c) => c.type == 'movie').take(catalogsPerType);
-      final series =
-          usable.where((c) => c.type == 'series').take(catalogsPerType);
-      final others = usable
-          .where((c) => c.type != 'movie' && c.type != 'series')
-          .take(catalogsPerType);
-      final results = await Future.wait([
-        for (final c in [...movies, ...series, ...others])
-          _safeSection(addon, c)
-      ]);
-      for (final s in results) {
-        if (s != null) sections.add(s);
-      }
-    }
+    final addons = await _cache.manifests();
+    if (addons.isEmpty) return [];
+    final perAddon = await Future.wait(
+      addons.map((addon) => _sectionsFor(addon, catalogsPerType)),
+    );
+    final sections = perAddon.expand((s) => s).toList();
+    _store(addons, catalogsPerType, sections);
     return sections;
+  }
+
+  Future<List<CatalogSection>> _sectionsFor(
+      LoadedManifest addon, int catalogsPerType) async {
+    if (!addon.manifest.supportsCatalog ||
+        addon.manifest.catalogs.isEmpty) {
+      return [];
+    }
+    final usable = addon.manifest.catalogs
+        .where((c) => c.type.isNotEmpty && c.id.isNotEmpty)
+        .toList();
+    final movies =
+        usable.where((c) => c.type == 'movie').take(catalogsPerType);
+    final series =
+        usable.where((c) => c.type == 'series').take(catalogsPerType);
+    final others = usable
+        .where((c) => c.type != 'movie' && c.type != 'series')
+        .take(catalogsPerType);
+    final results = await Future.wait([
+      for (final c in [...movies, ...series, ...others])
+        _safeSection(addon, c)
+    ]);
+    return results.whereType<CatalogSection>().toList();
+  }
+
+  /// Instant paint + background refresh. Returns cached sections
+  /// immediately when fresh; otherwise loads from network and caches.
+  /// Call [onRefresh] to repaint when the background pass finishes.
+  Future<List<CatalogSection>> loadSectionsCached({
+    int catalogsPerType = 3,
+    Future<void> Function(List<CatalogSection> fresh)? onRefresh,
+  }) async {
+    final addons = await _cache.manifests();
+    if (addons.isEmpty) return [];
+    final fresh = _cache.freshSections(addons, catalogsPerType);
+    if (fresh != null) {
+      final sections =
+          fresh.map(_fromCached).whereType<CatalogSection>().toList();
+      if (onRefresh != null) {
+        _reloadSections(addons, catalogsPerType, onRefresh);
+      }
+      return sections;
+    }
+    final sections = await _loadAndStore(addons, catalogsPerType);
+    return sections;
+  }
+
+  Future<void> _reloadSections(
+    List<LoadedManifest> addons,
+    int perType,
+    Future<void> Function(List<CatalogSection> fresh) onRefresh,
+  ) async {
+    try {
+      final sections = await _loadAndStore(addons, perType);
+      await onRefresh(sections);
+    } catch (_) {}
+  }
+
+  Future<List<CatalogSection>> _loadAndStore(
+      List<LoadedManifest> addons, int perType) async {
+    final perAddon =
+        await Future.wait(addons.map((a) => _sectionsFor(a, perType)));
+    final sections = perAddon.expand((s) => s).toList();
+    _store(addons, perType, sections);
+    return sections;
+  }
+
+  void _store(List<LoadedManifest> addons, int perType,
+      List<CatalogSection> sections) {
+    if (sections.isEmpty) return;
+    _cache.storeSections(
+      addons,
+      perType,
+      sections
+          .map((s) => CachedSection(
+                title: s.title,
+                subtitle: s.subtitle,
+                type: s.type,
+                items: s.items,
+                baseUrl: s.baseUrl,
+                catalog: s.catalog,
+                addonName: s.addonName,
+              ))
+          .toList(),
+    );
+  }
+
+  CatalogSection? _fromCached(CachedSection c) {
+    if (c.items.isEmpty) return null;
+    return CatalogSection(
+      title: c.title,
+      subtitle: c.subtitle,
+      type: c.type,
+      items: c.items,
+      baseUrl: c.baseUrl,
+      catalog: c.catalog,
+      addonName: c.addonName,
+    );
   }
 
   /// Searches one catalog per advertised type across all catalog
@@ -117,7 +193,7 @@ class CatalogService {
   Future<List<MediaItem>> searchAll(String query, {int limit = 40}) async {
     final q = query.trim();
     if (q.isEmpty) return [];
-    final addons = await _loadAddons();
+    final addons = await _cache.manifests();
     final jobs = <Future<List<MediaItem>>>[];
     for (final addon in addons) {
       if (!addon.manifest.supportsCatalog) continue;
@@ -129,7 +205,9 @@ class CatalogService {
                 type: catalog.type,
                 catalogId: catalog.id,
                 search: q,
-                extra: catalog.requiredDefaults)
+                extra: catalog.requiredDefaults,
+                client: _cache.client)
+            .timeout(const Duration(seconds: 10))
             .catchError((_) => <MediaItem>[]));
       }
     }
@@ -146,17 +224,30 @@ class CatalogService {
 
   /// Full meta details (background, genres, cast, episode lists)
   /// from the first meta-capable plugin that knows this title.
+  /// Results are cached for 10 minutes.
   Future<Map<String, dynamic>?> fetchMeta(MediaItem item) async {
     final type = stremioType(item.mediaType);
-    for (final addon in await _loadAddons()) {
+    final key = '$type:${item.id}';
+    final hit = _cache.freshMeta(key);
+    if (hit != null) return hit;
+    for (final addon in await _cache.manifests()) {
       if (!addon.manifest.supportsMeta) continue;
       if (addon.manifest.types.isNotEmpty &&
           !addon.manifest.types.contains(type)) {
         continue;
       }
-      final meta = await _client.fetchMeta(
-          baseUrl: addon.baseUrl, type: type, id: item.id);
-      if (meta != null) return meta;
+      final meta = await _client
+          .fetchMeta(
+              baseUrl: addon.baseUrl,
+              type: type,
+              id: item.id,
+              client: _cache.client)
+          .timeout(const Duration(seconds: 10))
+          .catchError((_) => null);
+      if (meta != null) {
+        _cache.storeMeta(key, meta);
+        return meta;
+      }
     }
     return null;
   }
@@ -184,10 +275,4 @@ class CatalogService {
     }
     return picks;
   }
-}
-
-class _LoadedAddon {
-  final String baseUrl;
-  final AddonManifest manifest;
-  const _LoadedAddon(this.baseUrl, this.manifest);
 }

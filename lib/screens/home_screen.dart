@@ -21,14 +21,22 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with AutomaticKeepAliveClientMixin {
   final CatalogService _catalogs = CatalogService();
   late Future<List<CatalogSection>> _future;
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
-    _future = _catalogs.loadSections();
+    // Cached sections paint instantly; the network refresh lands
+    // via onRefresh without a second spinner.
+    _future = _catalogs.loadSectionsCached(onRefresh: (fresh) async {
+      if (mounted) setState(() => _future = Future.value(fresh));
+    });
   }
 
   void _refresh() => setState(() => _future = _catalogs.loadSections());
@@ -55,6 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       body: Column(
         children: [
@@ -195,23 +204,15 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),
+          // Staggered TweenAnimationBuilders used to rebuild every tile
+          // for ~600ms on each paint (jank on scroll). Tiles now paint
+          // once; images fade in via CachedNetworkImage instead.
+          cacheExtent: 600,
           itemCount: items.length,
           separatorBuilder: (_, __) => const SizedBox(width: 14),
-          itemBuilder: (c, i) => TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: 1),
-            duration: Duration(milliseconds: 260 + (i % 8) * 40),
-            curve: AppTheme.curve,
-            builder: (context, v, child) => Opacity(
-              opacity: v,
-              child: Transform.translate(
-                offset: Offset(0, (1 - v) * 18),
-                child: child,
-              ),
-            ),
-            child: Pressable(
-              onTap: () => _open(items[i]),
-              child: PosterTile(item: items[i]),
-            ),
+          itemBuilder: (c, i) => Pressable(
+            onTap: () => _open(items[i]),
+            child: PosterTile(item: items[i]),
           ),
         ),
       ),

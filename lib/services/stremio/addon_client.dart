@@ -119,14 +119,24 @@ class AddonManifest {
 }
 
 class AddonClient {
-  Future<AddonManifest> fetchManifest(String manifestUrl) async {
-    final res = await http
-        .get(Uri.parse(manifestUrl))
-        .timeout(const Duration(seconds: 10));
-    if (res.statusCode != 200) {
-      throw Exception('manifest HTTP ${res.statusCode}');
+  /// Shared keep-alive client from [AddonCache] when available; a fresh
+  /// one-off client otherwise. Sharing avoids a TCP+TLS handshake per
+  /// request — the biggest hidden cost on home/detail/stream loads.
+  Future<AddonManifest> fetchManifest(String manifestUrl,
+      {http.Client? client}) async {
+    final c = client ?? http.Client();
+    final owned = client == null;
+    try {
+      final res = await c
+          .get(Uri.parse(manifestUrl))
+          .timeout(const Duration(seconds: 6));
+      if (res.statusCode != 200) {
+        throw Exception('manifest HTTP ${res.statusCode}');
+      }
+      return AddonManifest.fromJson(json.decode(res.body) as Map<String, dynamic>);
+    } finally {
+      if (owned) c.close();
     }
-    return AddonManifest.fromJson(json.decode(res.body) as Map<String, dynamic>);
   }
 
   /// Fetches a catalog page: `$baseUrl/catalog/<type>/<id>.json`.
@@ -139,6 +149,7 @@ class AddonClient {
     required String catalogId,
     String? search,
     Map<String, String> extra = const {},
+    http.Client? client,
   }) async {
     final params = <String, String>{...extra};
     if (search != null && search.trim().isNotEmpty) {
@@ -152,27 +163,35 @@ class AddonClient {
           .join('&');
       path = '/catalog/$type/$catalogId/$seg.json';
     }
-    final res = await http
-        .get(Uri.parse('$baseUrl$path'))
-        .timeout(const Duration(seconds: 12));
-    if (res.statusCode != 200) return [];
-    final data = json.decode(res.body);
-    if (data is! Map<String, dynamic>) return [];
-    final metas = data['metas'];
-    if (metas is! List) return [];
+    final c = client ?? http.Client();
+    final owned = client == null;
+    try {
+      final res = await c
+          .get(Uri.parse('$baseUrl$path'))
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) return [];
+      final data = json.decode(res.body);
+      if (data is! Map<String, dynamic>) return [];
+      final metas = data['metas'];
+      if (metas is! List) return [];
 
-    final items = <MediaItem>[];
-    for (final m in metas.whereType<Map<String, dynamic>>()) {
-      try {
-        final item = MediaItem.fromCinemeta(m, type);
-        if (item.id.isNotEmpty &&
-            item.title.trim().isNotEmpty &&
-            item.title != 'Unknown') {
-          items.add(item);
-        }
-      } catch (_) {}
+      final items = <MediaItem>[];
+      for (final m in metas.whereType<Map<String, dynamic>>()) {
+        try {
+          final item = MediaItem.fromCinemeta(m, type);
+          if (item.id.isNotEmpty &&
+              item.title.trim().isNotEmpty &&
+              item.title != 'Unknown') {
+            items.add(item);
+          }
+        } catch (_) {}
+      }
+      return items;
+    } catch (_) {
+      return [];
+    } finally {
+      if (owned) c.close();
     }
-    return items;
   }
 
   /// Fetches full meta details: `$baseUrl/meta/<type>/<id>.json`.
@@ -181,11 +200,14 @@ class AddonClient {
     required String baseUrl,
     required String type,
     required String id,
+    http.Client? client,
   }) async {
+    final c = client ?? http.Client();
+    final owned = client == null;
     try {
-      final res = await http
+      final res = await c
           .get(Uri.parse('$baseUrl/meta/$type/$id.json'))
-          .timeout(const Duration(seconds: 12));
+          .timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) return null;
       final data = json.decode(res.body);
       if (data is Map<String, dynamic> &&
@@ -195,6 +217,8 @@ class AddonClient {
       return null;
     } catch (_) {
       return null;
+    } finally {
+      if (owned) c.close();
     }
   }
 
@@ -213,6 +237,7 @@ class AddonClient {
     /// still attempted instead of silently skipped — addons that can't
     /// serve the id answer 404 and are skipped gracefully below.
     String fallbackId = '',
+    http.Client? client,
   }) async {
     String? id;
     if (idPrefixes.contains('tt') && imdbId.isNotEmpty) {
@@ -230,14 +255,26 @@ class AddonClient {
         ? '/stream/movie/$id.json'
         : '/stream/series/$id:$season:$episode.json';
 
-    final res = await http
-        .get(Uri.parse('$baseUrl$path'))
-        .timeout(const Duration(seconds: 12));
-    if (res.statusCode != 200) return [];
+    final c = client ?? http.Client();
+    final owned = client == null;
+    try {
+      final res = await c
+          .get(Uri.parse('$baseUrl$path'))
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) return [];
+      final data = json.decode(res.body);
+      final streams = data['streams'];
+      if (streams is! List) return [];
+      return _parseStreams(streams, addonName);
+    } catch (_) {
+      return [];
+    } finally {
+      if (owned) c.close();
+    }
+  }
 
-    final data = json.decode(res.body);
-    final streams = data['streams'];
-    if (streams is! List) return [];
+  static List<StreamResult> _parseStreams(
+      List streams, String addonName) {
 
     final results = <StreamResult>[];
     for (final s in streams) {
