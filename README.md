@@ -25,6 +25,7 @@
 
 ### 📖 Table of Contents
 - [✨ Features](#-features)
+- [📱 Screenshots](#-screenshots)
 - [🎬 Movie Engine](#-movie-engine)
 - [🎵 Music Engine](#-music-engine)
 - [🖼️ UI & Design](#️-ui--design)
@@ -52,6 +53,23 @@
 
 ---
 
+## 📱 Screenshots
+
+<p align="center">
+  <img src="https://imglink.cc/cdn/gnsTeMkmVc.jpg" width="32%" alt="Movix screen 1">
+  <img src="https://imglink.cc/cdn/lW6lusagKy.jpg" width="32%" alt="Movix screen 2">
+  <img src="https://imglink.cc/cdn/VVDfF_C1HS.jpg" width="32%" alt="Movix screen 3">
+</p>
+<p align="center">
+  <img src="https://imglink.cc/cdn/FFVOA6SFsn.jpg" width="32%" alt="Movix screen 4">
+  <img src="https://imglink.cc/cdn/pgWpdAU9LG.jpg" width="32%" alt="Movix screen 5">
+</p>
+<p align="center">
+  <sub>The green-dark Nebula interface — browse, detail, player, music & library.</sub>
+</p>
+
+---
+
 ## 🎬 Movie Engine
 
 - **Detail hero done right** — landscape backdrops fill a 16:9 banner with zero crop; portrait posters render fully visible on a gradient scrim. Pin-collapse navigation included.
@@ -72,16 +90,6 @@
 - Cinematic **green-on-black** nebula theme across every screen.
 - Editorial **Settings**: display header, hero status card, grouped 62px rows with tinted icon tiles, working music-quality selector.
 - Unified 10px-radius badges and `Expanded + ellipsis` text rows — long titles can never collide with actions.
-
-<!-- ══════════ SCREENSHOTS ══════════
-     Drop your images into  assets/screenshots/  then uncomment:
-
-<p align="center">
-  <img src="assets/screenshots/home.jpg"   width="30%" alt="Home">
-  <img src="assets/screenshots/player.jpg" width="30%" alt="Player">
-  <img src="assets/screenshots/music.jpg"  width="30%" alt="Music">
-</p>
-═══════════════════════════════════ -->
 
 ---
 
