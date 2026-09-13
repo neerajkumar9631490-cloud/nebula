@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_logo.dart';
+import 'core/runtime/app_target.dart';
 import 'streaming/torrserver_backend.dart';
 import 'services/stremio/addon_manager.dart';
 import 'screens/home_screen.dart';
@@ -17,9 +18,11 @@ import 'music/services/music_settings.dart';
 import 'services/downloads/video_download_service.dart';
 import 'music/widgets/mini_player.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  // Detect TV before the first frame so the shell can choose its layout.
+  await AppTarget.detect();
   // Pre-warm engine + loopback server behind the backend interface.
   TorrServerBackend().ensureReady();
   runApp(const MyApp());
@@ -185,20 +188,70 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
+  static const _destinations = [
+    (Icons.home_outlined, Icons.home_rounded, 'Home'),
+    (Icons.explore_outlined, Icons.explore_rounded, 'Discover'),
+    (Icons.download_outlined, Icons.download_rounded, 'Downloads'),
+    (Icons.music_note_outlined, Icons.music_note_rounded, 'Music'),
+    (Icons.extension_outlined, Icons.extension_rounded, 'Addons'),
+    (Icons.settings_outlined, Icons.settings_rounded, 'Settings'),
+  ];
+
   @override
   Widget build(BuildContext context) {
     void goSearch() => setState(() => _tab = 1);
+    final body = IndexedStack(
+      index: _tab,
+      children: [
+        for (var i = 0; i < 6; i++)
+          (i == _tab || _built.containsKey(i))
+              ? _body(i, goSearch)
+              : const SizedBox.shrink(),
+      ],
+    );
+
+    // TV: a left navigation rail keeps the 10-foot layout wide and
+    // D-pad friendly (remote users walk left to switch sections).
+    if (AppTarget.isTv) {
+      return Scaffold(
+        backgroundColor: AppTheme.bg,
+        body: Row(
+          children: [
+            NavigationRail(
+              backgroundColor: const Color(0xF0111117),
+              selectedIndex: _tab,
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              labelType: NavigationRailLabelType.all,
+              indicatorColor: AppTheme.accent.withOpacity(0.18),
+              selectedIconTheme: const IconThemeData(
+                  color: AppTheme.accent, size: 28),
+              unselectedIconTheme: const IconThemeData(
+                  color: AppTheme.textDim, size: 26),
+              selectedLabelTextStyle: const TextStyle(
+                  color: AppTheme.accent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700),
+              unselectedLabelTextStyle: const TextStyle(
+                  color: AppTheme.textDim, fontSize: 12),
+              destinations: [
+                for (final d in _destinations)
+                  NavigationRailDestination(
+                    icon: Icon(d.$1),
+                    selectedIcon: Icon(d.$2),
+                    label: Text(d.$3),
+                  ),
+              ],
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(child: body),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       extendBody: true,
-      body: IndexedStack(
-        index: _tab,
-        children: [
-          for (var i = 0; i < 6; i++)
-            (i == _tab || _built.containsKey(i))
-                ? _body(i, goSearch)
-                : const SizedBox.shrink(),
-        ],
-      ),
+      body: body,
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -212,41 +265,17 @@ class _MainShellState extends State<MainShell> {
               selectedIndex: _tab,
               onDestinationSelected: (i) => setState(() => _tab = i),
               animationDuration: AppTheme.med,
-              destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: 'Home',
+              destinations: [
+                for (final d in _destinations)
+                  NavigationDestination(
+                    icon: Icon(d.$1),
+                    selectedIcon: Icon(d.$2),
+                    label: d.$3,
+                  ),
+              ],
             ),
-            NavigationDestination(
-              icon: Icon(Icons.explore_outlined),
-              selectedIcon: Icon(Icons.explore_rounded),
-              label: 'Discover',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.download_outlined),
-              selectedIcon: Icon(Icons.download_rounded),
-              label: 'Downloads',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.music_note_outlined),
-              selectedIcon: Icon(Icons.music_note_rounded),
-              label: 'Music',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.extension_outlined),
-              selectedIcon: Icon(Icons.extension_rounded),
-              label: 'Addons',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings_rounded),
-              label: 'Settings',
-            ),
-          ],
-        ),
-      ),
-      ],
+          ),
+        ],
       ),
     );
   }

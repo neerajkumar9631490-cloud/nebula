@@ -1,27 +1,37 @@
-name: Build Movix APK
-on: [push, workflow_dispatch]
+name: Build Movix APKs (Phone + Android TV)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: '3.47.2'
+
       - name: Regenerate Android project as Movix
         run: |
           rm -rf android
           flutter create --org com.movix --project-name movix --platforms android .
+
       - run: flutter clean
       - run: flutter pub get
+
       - name: Icon and splash
         run: |
           if [ -f assets/logo.png ]; then
             dart run flutter_launcher_icons
             dart run flutter_native_splash:create
           fi
-      - name: Patch Android (TorrServer network + AGP 8 legacy libs)
+
+      - name: Patch Android (permissions + AGP 8 legacy libs)
         run: |
           M=android/app/src/main/AndroidManifest.xml
           grep -q 'android.permission.INTERNET' $M || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/><uses-permission android:name="android.permission.WAKE_LOCK"/><application|' $M
@@ -37,9 +47,77 @@ jobs:
             sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 36/' $G2
             grep -q 'useLegacyPackaging' $G2 || sed -i '/android {/a \    packagingOptions { jniLibs.useLegacyPackaging = true }' $G2
           fi
-      - run: flutter build apk --release --split-per-abi
-      - uses: actions/upload-artifact@v4
+
+      # ── Phone build (unchanged behaviour) ─────────────────────
+      - name: Build phone APKs
+        run: flutter build apk --release --split-per-abi
+
+      - name: Stage phone APKs
+        run: |
+          mkdir -p dist/phone
+          cp build/app/outputs/flutter-apk/*.apk dist/phone/ || true
+
+      # ── Android TV build (same code + TV manifest/launcher) ───
+      - name: Apply Android TV manifest and banner
+        run: |
+          python3 - <<'PY'
+          import re, pathlib, shutil
+          mpath = pathlib.Path('android/app/src/main/AndroidManifest.xml')
+          xml = mpath.read_text()
+
+          # TV uses-features: leanback + no touchscreen requirement.
+          feats = (
+              '    <uses-feature android:name="android.software.leanback" android:required="false"/>\n'
+              '    <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>\n'
+          )
+          if 'android.software.leanback' not in xml:
+              xml = xml.replace('<application', feats + '<application', 1)
+
+          # Home-screen banner for the TV launcher.
+          if 'android:banner' not in xml:
+              xml = re.sub(r'<application\b',
+                           '<application\n        android:banner="@drawable/tv_banner"', xml, count=1)
+
+          # Add the LEANBACK_LAUNCHER category to the launcher activity.
+          if 'android.intent.category.LEANBACK_LAUNCHER' not in xml:
+              xml = xml.replace(
+                  '<category android:name="android.intent.category.LAUNCHER" />',
+                  '<category android:name="android.intent.category.LAUNCHER" />\n'
+                  '                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />',
+              )
+
+          mpath.write_text(xml)
+
+          # TV banner drawable (320x180) for the leanback launcher.
+          src = pathlib.Path('assets/tv_banner.png')
+          dst_dir = pathlib.Path('android/app/src/main/res/drawable')
+          dst_dir.mkdir(parents=True, exist_ok=True)
+          if src.exists():
+              shutil.copy(src, dst_dir / 'tv_banner.png')
+          else:
+              print('warning: assets/tv_banner.png missing; banner not added')
+          print(xml)
+          PY
+
+      - name: Build Android TV APK
+        run: flutter build apk --release --target-platform android-arm64 --dart-define=MOVIX_TV=true
+
+      - name: Stage TV APK
+        run: |
+          mkdir -p dist/tv
+          cp build/app/outputs/flutter-apk/app-release.apk dist/tv/movix-tv-arm64.apk
+
+      # ── Upload both, phone APKs preserved ─────────────────────
+      - name: Upload phone APKs
+        uses: actions/upload-artifact@v4
         with:
-          name: movix-apk
-          path: build/app/outputs/flutter-apk/*.apk
+          name: movix-phone-apk
+          path: dist/phone/*.apk
+          retention-days: 30
+
+      - name: Upload Android TV APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: movix-tv-apk
+          path: dist/tv/*.apk
           retention-days: 30

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/runtime/app_target.dart';
 import '../models/media_item.dart';
 import '../services/stremio/catalog_service.dart';
 import '../theme/app_theme.dart';
@@ -220,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen>
           itemCount: items.length,
           separatorBuilder: (_, __) => const SizedBox(width: 14),
           itemBuilder: (c, i) => Pressable(
+            autofocus: AppTarget.isTv && i == 0,
             onTap: () => _open(items[i]),
             child: PosterTile(item: items[i]),
           ),

@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../core/runtime/app_target.dart';
 import '../theme/app_theme.dart';
 
 class GlassCard extends StatelessWidget {
@@ -17,7 +19,9 @@ class GlassCard extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          filter: ImageFilter.blur(
+              sigmaX: AppTarget.glassBlur,
+              sigmaY: AppTarget.glassBlur),
           child: Container(
             padding: padding,
             decoration: BoxDecoration(
@@ -36,11 +40,24 @@ class GlassCard extends StatelessWidget {
 }
 
 /// Subtle press-down scale used across cards / buttons for a smooth feel.
+/// On TV it doubles as the D-pad focus target: press OK to activate and
+/// a themed focus ring replaces the phone's tap-scale feedback.
 class Pressable extends StatefulWidget {
   final Widget child;
   final VoidCallback? onTap;
   final double scale;
-  const Pressable({super.key, required this.child, this.onTap, this.scale = 0.96});
+  final bool autofocus;
+  final FocusNode? focusNode;
+  final BorderRadius? focusBorderRadius;
+  const Pressable({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.scale = 0.96,
+    this.autofocus = false,
+    this.focusNode,
+    this.focusBorderRadius,
+  });
 
   @override
   State<Pressable> createState() => _PressableState();
@@ -48,21 +65,85 @@ class Pressable extends StatefulWidget {
 
 class _PressableState extends State<Pressable> {
   bool _down = false;
+  bool _focused = false;
+  FocusNode? _ownedNode;
+
+  FocusNode get _node =>
+      widget.focusNode ?? (_ownedNode ??= FocusNode());
+
+  @override
+  void dispose() {
+    _ownedNode?.dispose();
+    super.dispose();
+  }
+
+  void _activate() {
+    widget.onTap?.call();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _down = true),
-      onTapUp: (_) {
-        setState(() => _down = false);
-        widget.onTap?.call();
+    // Phone: the original tap-scale gesture. No focus machinery, so the
+    // touch build stays exactly as it was.
+    if (!AppTarget.isTv) {
+      return GestureDetector(
+        onTapDown: (_) => setState(() => _down = true),
+        onTapUp: (_) {
+          setState(() => _down = false);
+          widget.onTap?.call();
+        },
+        onTapCancel: () => setState(() => _down = false),
+        child: AnimatedScale(
+          scale: _down ? widget.scale : 1.0,
+          duration: AppTheme.fast,
+          curve: AppTheme.curve,
+          child: widget.child,
+        ),
+      );
+    }
+
+    // TV: focusable + OK/Enter activation, with a visible focus ring.
+    return FocusableActionDetector(
+      focusNode: _node,
+      autofocus: widget.autofocus,
+      onShowFocusHighlight: (v) => setState(() => _focused = v),
+      onShowHoverHighlight: (v) => setState(() => _focused = v),
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            _activate();
+            return null;
+          },
+        ),
       },
-      onTapCancel: () => setState(() => _down = false),
       child: AnimatedScale(
-        scale: _down ? widget.scale : 1.0,
+        scale: _focused ? 1.04 : 1.0,
         duration: AppTheme.fast,
         curve: AppTheme.curve,
-        child: widget.child,
+        child: Stack(
+          children: [
+            widget.child,
+            if (_focused)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: widget.focusBorderRadius ??
+                          BorderRadius.circular(AppTarget.focusRadius),
+                      border: Border.all(
+                          color: AppTarget.focusColor, width: 2.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTarget.focusColor.withOpacity(0.35),
+                          blurRadius: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

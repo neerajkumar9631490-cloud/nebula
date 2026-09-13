@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../models/stream_result.dart';
 import '../models/media_item.dart';
+import '../core/runtime/app_target.dart';
 import '../music/player/music_player_controller.dart';
 import '../core/bridge/host_bridge.dart';
 import '../core/runtime/app_runtime.dart';
@@ -193,7 +194,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final progress = _duration.inMilliseconds > 0
         ? (_position.inMilliseconds.clamp(0, _duration.inMilliseconds) / _duration.inMilliseconds)
         : 0.0;
-    return Scaffold(
+    final stage = Scaffold(
       backgroundColor: Colors.black,
       body: Stack(children: [
         GestureDetector(
@@ -498,6 +499,61 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ]))),
       ]),
     );
+
+    // TV remotes have no touch: map D-pad center/play and media keys to
+    // transport, and let left/right seek, up/down show controls.
+    if (AppTarget.isTv) {
+      return Shortcuts(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.mediaPlayPause):
+              _TogglePlayIntent(),
+          SingleActivator(LogicalKeyboardKey.mediaPlay): _PlayIntent(),
+          SingleActivator(LogicalKeyboardKey.mediaPause): _PauseIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowLeft): _SeekIntent(-10),
+          SingleActivator(LogicalKeyboardKey.arrowRight): _SeekIntent(10),
+          SingleActivator(LogicalKeyboardKey.arrowUp): _ShowControlsIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowDown):
+              _ShowControlsIntent(),
+          SingleActivator(LogicalKeyboardKey.escape): _BackIntent(),
+        },
+        child: Actions(
+          actions: {
+            _TogglePlayIntent: CallbackAction<_TogglePlayIntent>(
+                onInvoke: (_) {
+              _player.playOrPause();
+              _scheduleHide();
+              return null;
+            }),
+            _PlayIntent: CallbackAction<_PlayIntent>(onInvoke: (_) {
+              _player.play();
+              return null;
+            }),
+            _PauseIntent: CallbackAction<_PauseIntent>(onInvoke: (_) {
+              _player.pause();
+              return null;
+            }),
+            _SeekIntent: CallbackAction<_SeekIntent>(onInvoke: (intent) {
+              _seekBy(intent.seconds);
+              _scheduleHide();
+              return null;
+            }),
+            _ShowControlsIntent:
+                CallbackAction<_ShowControlsIntent>(onInvoke: (_) {
+              if (!_controlsVisible) setState(() => _controlsVisible = true);
+              _scheduleHide();
+              return null;
+            }),
+            _BackIntent: CallbackAction<_BackIntent>(onInvoke: (_) {
+              Navigator.maybePop(context);
+              return null;
+            }),
+          },
+          child: Focus(autofocus: true, child: stage),
+        ),
+      );
+    }
+    return stage;
   }
 
   Widget _roundBtn(IconData icon, VoidCallback onTap) {
@@ -511,4 +567,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
           icon: Icon(icon, size: 22), onPressed: () { onTap(); _scheduleHide(); }),
     );
   }
+}
+
+class _TogglePlayIntent extends Intent {
+  const _TogglePlayIntent();
+}
+
+class _PlayIntent extends Intent {
+  const _PlayIntent();
+}
+
+class _PauseIntent extends Intent {
+  const _PauseIntent();
+}
+
+class _SeekIntent extends Intent {
+  final int seconds;
+  const _SeekIntent(this.seconds);
+}
+
+class _ShowControlsIntent extends Intent {
+  const _ShowControlsIntent();
+}
+
+class _BackIntent extends Intent {
+  const _BackIntent();
 }
